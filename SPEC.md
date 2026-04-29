@@ -9,8 +9,8 @@
 - **Aluno 1 - Nome**: Camila Maffi
 - **Aluno 1 - Cartão UFRGS**: 00243691
 
-- **Aluno 2 - Nome**: <mark>`<preencher>`</mark>
-- **Aluno 2 - Cartão UFRGS**: <mark>`<preencher>`</mark>
+- **Aluno 2 - Nome**: Gilmar Félix
+- **Aluno 2 - Cartão UFRGS**: 00303051
 
 ## Detalhes do que será implementado
 
