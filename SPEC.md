@@ -115,3 +115,5 @@ A movimentação do personagem, a rotação dos PokéStops e o movimento da Pok�
 - Não haverá sistema online, login, amigos, eventos ou sincronização com dados reais do jogo. Esses recursos dependem de servidor, banco de dados e comunicação em rede, enquanto o trabalho será focado em uma aplicação gráfica local.
 
 - Efeitos visuais complexos, como partículas, brilhos intensos, transições elaboradas e animações muito detalhadas, serão implementados apenas de forma simplificada ou não serão implementados. Esses efeitos exigiriam mais tempo de modelagem, programação e ajuste visual, então a prioridade será atender aos requisitos principais de malhas, texturas, iluminação, câmeras, interações e animações.
+
+> Comentário Professor: OK
