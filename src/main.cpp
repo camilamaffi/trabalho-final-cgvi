@@ -300,7 +300,7 @@ int main(int argc, char* argv[])
 
     // Carregamos duas imagens para serem utilizadas como textura
     LoadTextureImage("../../data/red_brick_diff_1k.jpg");      // TextureImage0
-    LoadTextureImage("../../data/rocky_terrain_02_diff_1k.jpg"); // TextureImage1
+    LoadTextureImage("../../data/map.png"); // TextureImage1
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel spheremodel("../../data/sphere.obj");
