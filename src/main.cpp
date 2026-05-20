@@ -196,8 +196,8 @@ bool g_MiddleMouseButtonPressed = false; // Análogo para botão do meio do mous
 // efetiva da câmera é calculada dentro da função main(), dentro do loop de
 // renderização.
 float g_CameraTheta = 0.0f; // Ângulo no plano ZX em relação ao eixo Z
-float g_CameraPhi = 0.0f;   // Ângulo em relação ao eixo Y
-float g_CameraDistance = 3.5f; // Distância da câmera para a origem
+float g_CameraPhi = 1.0f;   // Ângulo em relação ao eixo Y
+float g_CameraDistance = 3.0f; // Distância da câmera para a origem
 
 // Variáveis que controlam rotação do antebraço
 float g_ForearmAngleZ = 0.0f;
@@ -206,6 +206,16 @@ float g_ForearmAngleX = 0.0f;
 // Variáveis que controlam translação do torso
 float g_TorsoPositionX = 0.0f;
 float g_TorsoPositionY = 0.0f;
+
+// Posição do personagem (cubo) controlado pelo teclado
+float g_PlayerX = 0.0f;
+float g_PlayerZ = 0.0f;
+
+// Estado das teclas de movimento WASD / setas
+bool g_KeyW = false;
+bool g_KeyA = false;
+bool g_KeyS = false;
+bool g_KeyD = false;
 
 // Variável que controla o tipo de projeção utilizada: perspectiva ou ortográfica.
 bool g_UsePerspectiveProjection = true;
@@ -303,13 +313,13 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/map.png"); // TextureImage1
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
-    ObjModel spheremodel("../../data/sphere.obj");
-    ComputeNormals(&spheremodel);
-    BuildTrianglesAndAddToVirtualScene(&spheremodel);
+    ObjModel cubemodel("../../data/cube.obj");
+    ComputeNormals(&cubemodel);
+    BuildTrianglesAndAddToVirtualScene(&cubemodel);
 
-    ObjModel bunnymodel("../../data/bunny.obj");
-    ComputeNormals(&bunnymodel);
-    BuildTrianglesAndAddToVirtualScene(&bunnymodel);
+    ObjModel pikachumodel("../../data/pikachu_final.obj");
+    ComputeNormals(&pikachumodel);
+    BuildTrianglesAndAddToVirtualScene(&pikachumodel);
 
     ObjModel planemodel("../../data/plane.obj");
     ComputeNormals(&planemodel);
@@ -357,6 +367,25 @@ int main(int argc, char* argv[])
         // variáveis g_CameraDistance, g_CameraPhi, e g_CameraTheta são
         // controladas pelo mouse do usuário. Veja as funções CursorPosCallback()
         // e ScrollCallback().
+        // Delta time para movimento suave
+        static float prev_time = (float)glfwGetTime();
+        float curr_time = (float)glfwGetTime();
+        float delta_t = curr_time - prev_time;
+        prev_time = curr_time;
+
+        float speed = 2.0f;
+        if (g_KeyW) g_PlayerZ -= speed * delta_t;
+        if (g_KeyS) g_PlayerZ += speed * delta_t;
+        if (g_KeyA) g_PlayerX -= speed * delta_t;
+        if (g_KeyD) g_PlayerX += speed * delta_t;
+
+        // Limita o personagem dentro do mapa (plano de -1 a 1 em X e Z)
+        const float MAP_LIMIT = 1.0f - 0.075f;
+        if (g_PlayerX < -MAP_LIMIT) g_PlayerX = -MAP_LIMIT;
+        if (g_PlayerX >  MAP_LIMIT) g_PlayerX =  MAP_LIMIT;
+        if (g_PlayerZ < -MAP_LIMIT) g_PlayerZ = -MAP_LIMIT;
+        if (g_PlayerZ >  MAP_LIMIT) g_PlayerZ =  MAP_LIMIT;
+
         float r = g_CameraDistance;
         float y = r*sin(g_CameraPhi);
         float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
@@ -364,8 +393,8 @@ int main(int argc, char* argv[])
 
         // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
         // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-        glm::vec4 camera_position_c  = glm::vec4(x,y,z,1.0f); // Ponto "c", centro da câmera
-        glm::vec4 camera_lookat_l    = glm::vec4(0.0f,0.0f,0.0f,1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
+        glm::vec4 camera_position_c  = glm::vec4(x + g_PlayerX, y, z + g_PlayerZ, 1.0f); // Ponto "c", centro da câmera
+        glm::vec4 camera_lookat_l    = glm::vec4(g_PlayerX, 0.0f, g_PlayerZ, 1.0f); // Câmera segue o personagem
         glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
         glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
 
@@ -410,25 +439,24 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
         glUniformMatrix4fv(g_projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
 
-        #define SPHERE 0
-        #define BUNNY  1
-        #define PLANE  2
+        #define CUBE    1
+        #define PLANE   2
+        #define PIKACHU 3
 
-        // Desenhamos o modelo da esfera
-        model = Matrix_Translate(-1.0f,0.0f,0.0f)
-              * Matrix_Rotate_Z(0.6f)
-              * Matrix_Rotate_X(0.2f)
-              * Matrix_Rotate_Y(g_AngleY + (float)glfwGetTime() * 0.1f);
+        // Desenhamos o personagem (cubo) controlado pelo teclado
+        model = Matrix_Translate(g_PlayerX, -1.025f, g_PlayerZ)
+              * Matrix_Scale(0.15f, 0.15f, 0.15f);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, SPHERE);
-        DrawVirtualObject("the_sphere");
+        glUniform1i(g_object_id_uniform, CUBE);
+        DrawVirtualObject("the_cube");
 
-        // Desenhamos o modelo do coelho
-        model = Matrix_Translate(1.0f,0.0f,0.0f)
-              * Matrix_Rotate_X(g_AngleX + (float)glfwGetTime() * 0.1f);
+        // Desenhamos o Pikachu (posição fixa no mapa)
+        model = Matrix_Translate(0.5f, -0.96f, 0.3f)
+              * Matrix_Scale(0.1f, 0.1f, 0.1f)
+              * Matrix_Translate(-0.82f, 0.0f, -0.06f);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, BUNNY);
-        DrawVirtualObject("the_bunny");
+        glUniform1i(g_object_id_uniform, PIKACHU);
+        DrawVirtualObject("Cube");
 
         // Desenhamos o plano do chão
         model = Matrix_Translate(0.0f,-1.1f,0.0f);
@@ -760,7 +788,12 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
         size_t first_index = indices.size();
         size_t num_triangles = model->shapes[shape].mesh.num_face_vertices.size();
 
-        const float minval = std::numeric_limits<float>::min();
+        // Em 2026-05-18, corrigido bug encontrado pelo aluno Arthur Prediger:
+        // std::numeric_limits<float>::min() retorna o menor valor positivo
+        // normalizado representável, não o menor valor possível (negativo). Para
+        // inicializar o limite máximo da bounding box com um valor "muito
+        // pequeno", deve ser usado std::numeric_limits<float>::lowest()
+        const float minval = std::numeric_limits<float>::lowest();
         const float maxval = std::numeric_limits<float>::max();
 
         glm::vec3 bbox_min = glm::vec3(maxval,maxval,maxval);
@@ -1251,6 +1284,9 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         g_ForearmAngleZ = 0.0f;
         g_TorsoPositionX = 0.0f;
         g_TorsoPositionY = 0.0f;
+        g_CameraTheta = 0.0f;
+        g_CameraPhi = 1.0f;
+        g_CameraDistance = 3.0f;
     }
 
     // Se o usuário apertar a tecla P, utilizamos projeção perspectiva.
@@ -1278,6 +1314,16 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         fprintf(stdout,"Shaders recarregados!\n");
         fflush(stdout);
     }
+
+    // Movimento do personagem com WASD ou setas
+    if (key == GLFW_KEY_W || key == GLFW_KEY_UP)
+        g_KeyW = (action != GLFW_RELEASE);
+    if (key == GLFW_KEY_S || key == GLFW_KEY_DOWN)
+        g_KeyS = (action != GLFW_RELEASE);
+    if (key == GLFW_KEY_A || key == GLFW_KEY_LEFT)
+        g_KeyA = (action != GLFW_RELEASE);
+    if (key == GLFW_KEY_D || key == GLFW_KEY_RIGHT)
+        g_KeyD = (action != GLFW_RELEASE);
 }
 
 // Definimos o callback para impressão de erros da GLFW no terminal
