@@ -235,6 +235,24 @@ GLint g_bbox_max_uniform;
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
 
+// estrutura para armezanar os objetos 3d do cenario
+struct SceneEntity
+{
+    std::string mesh;
+
+    glm::vec3 position;
+    glm::vec3 scale;
+    glm::vec3 localOffset;
+
+    int object_id;
+
+    bool collidable;
+};
+
+std::vector<SceneEntity> g_Entities;
+
+bool CheckCollision(float playerX, float playerZ, float playerHalfSize);
+
 int main(int argc, char* argv[])
 {
     // Inicializamos a biblioteca GLFW, utilizada para criar uma janela do
@@ -374,15 +392,35 @@ int main(int argc, char* argv[])
         prev_time = curr_time;
 
         float speed = 2.0f;
-        if (g_KeyW) g_PlayerZ -= speed * delta_t;
-        if (g_KeyS) g_PlayerZ += speed * delta_t;
-        if (g_KeyA) g_PlayerX -= speed * delta_t;
-        if (g_KeyD) g_PlayerX += speed * delta_t;
 
-        // Limita o personagem dentro do mapa (plano de -1 a 1 em X e Z)
+        // Próxima posição do jogador
+        float nextPlayerX = g_PlayerX;
+        float nextPlayerZ = g_PlayerZ;
+
+        // Movimento
+        if (g_KeyW) nextPlayerZ -= speed * delta_t;
+        if (g_KeyS) nextPlayerZ += speed * delta_t;
+        if (g_KeyA) nextPlayerX -= speed * delta_t;
+        if (g_KeyD) nextPlayerX += speed * delta_t;
+
+        // Colisão com todos os objetos registrados
+        float playerHalfSize = 0.075f;
+
+        if (!CheckCollision(
+                nextPlayerX,
+                nextPlayerZ,
+                playerHalfSize))
+        {
+            g_PlayerX = nextPlayerX;
+            g_PlayerZ = nextPlayerZ;
+        }
+
+        // Limites do mapa
         const float MAP_LIMIT = 1.0f - 0.075f;
+
         if (g_PlayerX < -MAP_LIMIT) g_PlayerX = -MAP_LIMIT;
         if (g_PlayerX >  MAP_LIMIT) g_PlayerX =  MAP_LIMIT;
+
         if (g_PlayerZ < -MAP_LIMIT) g_PlayerZ = -MAP_LIMIT;
         if (g_PlayerZ >  MAP_LIMIT) g_PlayerZ =  MAP_LIMIT;
 
@@ -443,26 +481,79 @@ int main(int argc, char* argv[])
         #define PLANE   2
         #define PIKACHU 3
 
-        // Desenhamos o personagem (cubo) controlado pelo teclado
-        model = Matrix_Translate(g_PlayerX, -1.025f, g_PlayerZ)
-              * Matrix_Scale(0.15f, 0.15f, 0.15f);
-        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, CUBE);
+        // define todos os objetos do cenario
+        SceneEntity pikachu;
+
+        pikachu.mesh = "Cube";
+        pikachu.position = glm::vec3(0.5f, -0.96f, 0.3f);
+        pikachu.scale = glm::vec3(0.1f);
+        pikachu.localOffset = glm::vec3(-0.82f, 0.0f, -0.06f);
+        pikachu.object_id = PIKACHU;
+        pikachu.collidable = true;
+
+        g_Entities.push_back(pikachu);
+
+        SceneEntity plane;
+
+        plane.mesh = "the_plane";
+        plane.position = glm::vec3(0.0f, -1.1f, 0.0f);
+        plane.scale = glm::vec3(1.0f);
+        plane.localOffset = glm::vec3(0.0f);
+        plane.object_id = PLANE;
+        plane.collidable = false;
+
+        g_Entities.push_back(plane);
+
+        // desenha o jogador
+
+        model =
+            Matrix_Translate(g_PlayerX, -1.025f, g_PlayerZ)
+            *
+            Matrix_Scale(0.15f, 0.15f, 0.15f);
+
+        glUniformMatrix4fv(
+            g_model_uniform,
+            1,
+            GL_FALSE,
+            glm::value_ptr(model));
+
+        glUniform1i(
+            g_object_id_uniform,
+            CUBE);
+
         DrawVirtualObject("the_cube");
 
-        // Desenhamos o Pikachu (posição fixa no mapa)
-        model = Matrix_Translate(0.5f, -0.96f, 0.3f)
-              * Matrix_Scale(0.1f, 0.1f, 0.1f)
-              * Matrix_Translate(-0.82f, 0.0f, -0.06f);
-        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, PIKACHU);
-        DrawVirtualObject("Cube");
+        // desenha todos os objetos da cena
+        for (const auto& obj : g_Entities)
+        {
+            model =
+                Matrix_Translate(
+                    obj.position.x,
+                    obj.position.y,
+                    obj.position.z)
+                *
+                Matrix_Scale(
+                    obj.scale.x,
+                    obj.scale.y,
+                    obj.scale.z)
+                *
+                Matrix_Translate(
+                    obj.localOffset.x,
+                    obj.localOffset.y,
+                    obj.localOffset.z);
 
-        // Desenhamos o plano do chão
-        model = Matrix_Translate(0.0f,-1.1f,0.0f);
-        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, PLANE);
-        DrawVirtualObject("the_plane");
+            glUniformMatrix4fv(
+                g_model_uniform,
+                1,
+                GL_FALSE,
+                glm::value_ptr(model));
+
+            glUniform1i(
+                g_object_id_uniform,
+                obj.object_id);
+
+            DrawVirtualObject(obj.mesh.c_str());
+        }
 
         // Imprimimos na tela os ângulos de Euler que controlam a rotação do
         // terceiro cubo.
@@ -495,6 +586,42 @@ int main(int argc, char* argv[])
 
     // Fim do programa
     return 0;
+}
+
+// função para verificar colisao entre o personagem e os objetos do cenario
+bool CheckCollision(float playerX, float playerZ, float playerHalfSize)
+{
+    for (const auto& obj : g_Entities)
+    {
+        if (!obj.collidable)
+            continue;
+
+        SceneObject& mesh = g_VirtualScene[obj.mesh];
+
+        float objWidth =
+            (mesh.bbox_max.x - mesh.bbox_min.x)
+            * obj.scale.x;
+
+        float objDepth =
+            (mesh.bbox_max.z - mesh.bbox_min.z)
+            * obj.scale.z;
+
+        float objHalfX = objWidth * 0.5f;
+        float objHalfZ = objDepth * 0.5f;
+
+        bool collisionX =
+            fabs(playerX - obj.position.x)
+            < (playerHalfSize + objHalfX);
+
+        bool collisionZ =
+            fabs(playerZ - obj.position.z)
+            < (playerHalfSize + objHalfZ);
+
+        if (collisionX && collisionZ)
+            return true;
+    }
+
+    return false;
 }
 
 // Função que carrega uma imagem para ser utilizada como textura
