@@ -1,2 +1,8 @@
 https://polyhaven.com/a/rocky_terrain_02
 https://polyhaven.com/a/red_brick
+
+Boneco do jogador (adventurer.obj) - "Adventurer" por Quaternius, licenca CC0 (dominio publico)
+https://poly.pizza/m/5EGWBMpuXq
+https://quaternius.com/
+Observacao: modelo original em GLB; convertido para OBJ e com as cores da paleta
+assadas como cor-por-vertice (linhas "v x y z r g b").

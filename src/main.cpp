@@ -196,7 +196,7 @@ bool g_MiddleMouseButtonPressed = false; // Análogo para botão do meio do mous
 // efetiva da câmera é calculada dentro da função main(), dentro do loop de
 // renderização.
 float g_CameraTheta = 0.0f; // Ângulo no plano ZX em relação ao eixo Z
-float g_CameraPhi = 1.0f;   // Ângulo em relação ao eixo Y
+float g_CameraPhi = 0.6f;   // Ângulo em relação ao eixo Y (inclinação baixa estilo Pokémon GO)
 float g_CameraDistance = 3.0f; // Distância da câmera para a origem
 
 // Variáveis que controlam rotação do antebraço
@@ -210,6 +210,10 @@ float g_TorsoPositionY = 0.0f;
 // Posição do personagem (cubo) controlado pelo teclado
 float g_PlayerX = 0.0f;
 float g_PlayerZ = 0.0f;
+
+// Ângulo de orientação (yaw) do personagem: ele "olha" para onde anda,
+// estilo avatar do Pokémon GO. Atualizado no loop de movimento.
+float g_PlayerAngleY = 0.0f;
 
 // Estado das teclas de movimento WASD / setas
 bool g_KeyW = false;
@@ -247,6 +251,11 @@ struct SceneEntity
     int object_id;
 
     bool collidable;
+
+    // Raio de aproximação (em unidades de mundo) para o objeto "aparecer".
+    // 0 = sempre visível. > 0 = só desenha quando o jogador chega perto, com
+    // um efeito suave de surgir/sumir (estilo Pokémon GO).
+    float appearRadius = 0.0f;
 };
 
 std::vector<SceneEntity> g_Entities;
@@ -326,9 +335,9 @@ int main(int argc, char* argv[])
     //
     LoadShadersFromFiles();
 
-    // Carregamos duas imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/red_brick_diff_1k.jpg");      // TextureImage0
-    LoadTextureImage("../../data/map.png"); // TextureImage1
+    LoadTextureImage("../../data/red_brick_diff_1k.jpg"); // TextureImage0
+    LoadTextureImage("../../data/map.png");               // TextureImage1
+    LoadTextureImage("../../data/forest.png");            // TextureImage2 - floresta que tila fora do mapa
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel cubemodel("../../data/cube.obj");
@@ -342,6 +351,12 @@ int main(int argc, char* argv[])
     ObjModel planemodel("../../data/plane.obj");
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
+
+    // Boneco do jogador (modelo low-poly CC0 "Adventurer", Quaternius/Poly Pizza).
+    // Cores embutidas como cor por vértice (paleta assada). Veja data/adventurer.obj.
+    ObjModel adventurermodel("../../data/adventurer.obj");
+    ComputeNormals(&adventurermodel);
+    BuildTrianglesAndAddToVirtualScene(&adventurermodel);
 
     if ( argc > 1 )
     {
@@ -359,6 +374,50 @@ int main(int argc, char* argv[])
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
+
+    #define CUBE         1
+    #define PLANE        2
+    #define PIKACHU      3
+    #define TREE         4
+    #define FOREST_WALL  5
+    #define PLAYER       6
+
+    // Configuração dos objetos da cena (feita uma única vez, fora do loop)
+    {
+        // Vários pikachus espalhados pelo mapa. Cada um só aparece quando o
+        // jogador chega perto (appearRadius) e some ao se afastar.
+        const glm::vec3 pikachuSpots[] = {
+            glm::vec3( 0.5f, -0.96f,  0.3f),
+            glm::vec3(-2.5f, -0.96f,  1.8f),
+            glm::vec3( 2.8f, -0.96f, -1.5f),
+            glm::vec3(-1.2f, -0.96f, -3.0f),
+            glm::vec3( 3.2f, -0.96f,  2.6f),
+            glm::vec3(-3.4f, -0.96f, -2.2f),
+        };
+
+        for (const glm::vec3& spot : pikachuSpots)
+        {
+            SceneEntity pikachu;
+            pikachu.mesh = "Cube";
+            pikachu.position = spot;
+            pikachu.scale = glm::vec3(0.1f);
+            pikachu.localOffset = glm::vec3(-0.82f, 0.0f, -0.06f);
+            pikachu.object_id = PIKACHU;
+            pikachu.collidable = true;
+            pikachu.appearRadius = 1.2f; // distância em que o pikachu surge
+            g_Entities.push_back(pikachu);
+        }
+
+        SceneEntity plane;
+        plane.mesh = "the_plane";
+        plane.position = glm::vec3(0.0f, -1.1f, 0.0f);
+        plane.scale = glm::vec3(15.0f, 1.0f, 15.0f);
+        plane.localOffset = glm::vec3(0.0f);
+        plane.object_id = PLANE;
+        plane.collidable = false;
+        g_Entities.push_back(plane);
+
+    }
 
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
@@ -397,11 +456,23 @@ int main(int argc, char* argv[])
         float nextPlayerX = g_PlayerX;
         float nextPlayerZ = g_PlayerZ;
 
-        // Movimento
-        if (g_KeyW) nextPlayerZ -= speed * delta_t;
-        if (g_KeyS) nextPlayerZ += speed * delta_t;
-        if (g_KeyA) nextPlayerX -= speed * delta_t;
-        if (g_KeyD) nextPlayerX += speed * delta_t;
+        // Movimento relativo à câmera
+        float forwardX = -sin(g_CameraTheta);
+        float forwardZ = -cos(g_CameraTheta);
+        float rightX   =  cos(g_CameraTheta);
+        float rightZ   = -sin(g_CameraTheta);
+
+        if (g_KeyW) { nextPlayerX += forwardX * speed * delta_t; nextPlayerZ += forwardZ * speed * delta_t; }
+        if (g_KeyS) { nextPlayerX -= forwardX * speed * delta_t; nextPlayerZ -= forwardZ * speed * delta_t; }
+        if (g_KeyA) { nextPlayerX -= rightX * speed * delta_t;   nextPlayerZ -= rightZ * speed * delta_t; }
+        if (g_KeyD) { nextPlayerX += rightX * speed * delta_t;   nextPlayerZ += rightZ * speed * delta_t; }
+
+        // Avatar olha para a direção em que está andando (estilo Pokémon GO).
+        // Calculamos o yaw a partir do vetor de movimento desejado neste frame.
+        float moveDirX = nextPlayerX - g_PlayerX;
+        float moveDirZ = nextPlayerZ - g_PlayerZ;
+        if (fabs(moveDirX) > 1e-5f || fabs(moveDirZ) > 1e-5f)
+            g_PlayerAngleY = atan2(moveDirX, moveDirZ);
 
         // Colisão com todos os objetos registrados
         float playerHalfSize = 0.075f;
@@ -415,8 +486,8 @@ int main(int argc, char* argv[])
             g_PlayerZ = nextPlayerZ;
         }
 
-        // Limites do mapa
-        const float MAP_LIMIT = 1.0f - 0.075f;
+        // Limite de segurança (árvores bloqueiam em ~±4.4, isso é só backstop)
+        const float MAP_LIMIT = 5.0f;
 
         if (g_PlayerX < -MAP_LIMIT) g_PlayerX = -MAP_LIMIT;
         if (g_PlayerX >  MAP_LIMIT) g_PlayerX =  MAP_LIMIT;
@@ -446,7 +517,7 @@ int main(int argc, char* argv[])
         // Note que, no sistema de coordenadas da câmera, os planos near e far
         // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
         float nearplane = -0.1f;  // Posição do "near plane"
-        float farplane  = -10.0f; // Posição do "far plane"
+        float farplane  = -20.0f; // Posição do "far plane" (aumentado para cobrir o plano escalado)
 
         if (g_UsePerspectiveProjection)
         {
@@ -477,39 +548,21 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
         glUniformMatrix4fv(g_projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
 
-        #define CUBE    1
-        #define PLANE   2
-        #define PIKACHU 3
-
-        // define todos os objetos do cenario
-        SceneEntity pikachu;
-
-        pikachu.mesh = "Cube";
-        pikachu.position = glm::vec3(0.5f, -0.96f, 0.3f);
-        pikachu.scale = glm::vec3(0.1f);
-        pikachu.localOffset = glm::vec3(-0.82f, 0.0f, -0.06f);
-        pikachu.object_id = PIKACHU;
-        pikachu.collidable = true;
-
-        g_Entities.push_back(pikachu);
-
-        SceneEntity plane;
-
-        plane.mesh = "the_plane";
-        plane.position = glm::vec3(0.0f, -1.1f, 0.0f);
-        plane.scale = glm::vec3(1.0f);
-        plane.localOffset = glm::vec3(0.0f);
-        plane.object_id = PLANE;
-        plane.collidable = false;
-
-        g_Entities.push_back(plane);
-
         // desenha o jogador
 
+        // Boneco do jogador. O modelo tem ~1.86 de altura e os pés na origem
+        // (y=0), então o escalamos e o posicionamos sobre o chão (y = -1.1).
+        // PLAYER_FACING_OFFSET: ajuste fino caso o boneco ande "de costas"
+        // (some 3.1415927f para girar 180°).
+        const float PLAYER_SCALE = 0.22f;
+        const float PLAYER_FACING_OFFSET = 0.0f;
+
         model =
-            Matrix_Translate(g_PlayerX, -1.025f, g_PlayerZ)
+            Matrix_Translate(g_PlayerX, -1.1f, g_PlayerZ)
             *
-            Matrix_Scale(0.15f, 0.15f, 0.15f);
+            Matrix_Rotate_Y(g_PlayerAngleY + PLAYER_FACING_OFFSET)
+            *
+            Matrix_Scale(PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE);
 
         glUniformMatrix4fv(
             g_model_uniform,
@@ -519,13 +572,32 @@ int main(int argc, char* argv[])
 
         glUniform1i(
             g_object_id_uniform,
-            CUBE);
+            PLAYER);
 
-        DrawVirtualObject("the_cube");
+        DrawVirtualObject("player_character");
 
         // desenha todos os objetos da cena
         for (const auto& obj : g_Entities)
         {
+            // Fator de visibilidade por aproximação (estilo Pokémon GO).
+            // appearRadius == 0  -> sempre visível.
+            // appearRadius  > 0  -> surge/some suavemente conforme a distância.
+            float appearScale = 1.0f;
+            if (obj.appearRadius > 0.0f)
+            {
+                float dx = g_PlayerX - obj.position.x;
+                float dz = g_PlayerZ - obj.position.z;
+                float dist = sqrtf(dx*dx + dz*dz);
+
+                const float fade = 0.6f; // largura da faixa de transição
+                appearScale = (obj.appearRadius - dist) / fade;
+                appearScale = std::max(0.0f, std::min(1.0f, appearScale));
+
+                // Totalmente longe: nem desenha (economiza e fica invisível).
+                if (appearScale <= 0.0f)
+                    continue;
+            }
+
             model =
                 Matrix_Translate(
                     obj.position.x,
@@ -533,9 +605,9 @@ int main(int argc, char* argv[])
                     obj.position.z)
                 *
                 Matrix_Scale(
-                    obj.scale.x,
-                    obj.scale.y,
-                    obj.scale.z)
+                    obj.scale.x * appearScale,
+                    obj.scale.y * appearScale,
+                    obj.scale.z * appearScale)
                 *
                 Matrix_Translate(
                     obj.localOffset.x,
@@ -553,6 +625,44 @@ int main(int argc, char* argv[])
                 obj.object_id);
 
             DrawVirtualObject(obj.mesh.c_str());
+        }
+
+        // Painéis verticais de floresta nos 4 lados — dão sensação de 3D
+        {
+            const float WD  = 5.5f;  // distância da borda do mapa
+            const float WHW = 8.0f;  // meia-largura do painel
+            const float WHH = 4.5f;  // meia-altura do painel
+            const float WCY = WHH - 1.1f; // centro Y: base alinhada ao chão
+
+            glUniform1i(g_object_id_uniform, FOREST_WALL);
+
+            // Norte: Z = -WD, face voltada para +Z (centro)
+            model = Matrix_Translate(0.0f, WCY, -WD)
+                  * Matrix_Rotate_X(3.141592f / 2.0f)
+                  * Matrix_Scale(WHW, 1.0f, WHH);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            DrawVirtualObject("the_plane");
+
+            // Sul: Z = +WD, face voltada para -Z (centro)
+            model = Matrix_Translate(0.0f, WCY, WD)
+                  * Matrix_Rotate_X(-3.141592f / 2.0f)
+                  * Matrix_Scale(WHW, 1.0f, WHH);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            DrawVirtualObject("the_plane");
+
+            // Leste: X = +WD, face voltada para -X (centro)
+            model = Matrix_Translate(WD, WCY, 0.0f)
+                  * Matrix_Rotate_Z(3.141592f / 2.0f)
+                  * Matrix_Scale(WHH, 1.0f, WHW);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            DrawVirtualObject("the_plane");
+
+            // Oeste: X = -WD, face voltada para +X (centro)
+            model = Matrix_Translate(-WD, WCY, 0.0f)
+                  * Matrix_Rotate_Z(-3.141592f / 2.0f)
+                  * Matrix_Scale(WHH, 1.0f, WHW);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            DrawVirtualObject("the_plane");
         }
 
         // Imprimimos na tela os ângulos de Euler que controlam a rotação do
@@ -909,6 +1019,12 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
     std::vector<float>  model_coefficients;
     std::vector<float>  normal_coefficients;
     std::vector<float>  texture_coefficients;
+    std::vector<float>  color_coefficients;
+
+    // Alguns modelos (ex.: o boneco do jogador) trazem uma cor por vértice
+    // embutida no .obj (linhas "v x y z r g b"). A tinyobjloader as guarda em
+    // attrib.colors. Quando não existem, ela preenche com branco (1,1,1).
+    bool has_vertex_colors = !model->attrib.colors.empty();
 
     for (size_t shape = 0; shape < model->shapes.size(); ++shape)
     {
@@ -975,6 +1091,13 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
                     texture_coefficients.push_back( u );
                     texture_coefficients.push_back( v );
                 }
+
+                if ( has_vertex_colors )
+                {
+                    color_coefficients.push_back( model->attrib.colors[3*idx.vertex_index + 0] );
+                    color_coefficients.push_back( model->attrib.colors[3*idx.vertex_index + 1] );
+                    color_coefficients.push_back( model->attrib.colors[3*idx.vertex_index + 2] );
+                }
             }
         }
 
@@ -1027,6 +1150,20 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
         glBufferSubData(GL_ARRAY_BUFFER, 0, texture_coefficients.size() * sizeof(float), texture_coefficients.data());
         location = 2; // "(location = 1)" em "shader_vertex.glsl"
         number_of_dimensions = 2; // vec2 em "shader_vertex.glsl"
+        glVertexAttribPointer(location, number_of_dimensions, GL_FLOAT, GL_FALSE, 0, 0);
+        glEnableVertexAttribArray(location);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+
+    if ( !color_coefficients.empty() )
+    {
+        GLuint VBO_color_coefficients_id;
+        glGenBuffers(1, &VBO_color_coefficients_id);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO_color_coefficients_id);
+        glBufferData(GL_ARRAY_BUFFER, color_coefficients.size() * sizeof(float), NULL, GL_STATIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, color_coefficients.size() * sizeof(float), color_coefficients.data());
+        location = 3; // "(location = 3)" em "shader_vertex.glsl"
+        number_of_dimensions = 3; // vec3 em "shader_vertex.glsl"
         glVertexAttribPointer(location, number_of_dimensions, GL_FLOAT, GL_FALSE, 0, 0);
         glEnableVertexAttribArray(location);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -1290,21 +1427,22 @@ void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
         // Deslocamento do cursor do mouse em x e y de coordenadas de tela!
         float dx = xpos - g_LastCursorPosX;
         float dy = ypos - g_LastCursorPosY;
-    
+
         // Atualizamos parâmetros da câmera com os deslocamentos
         g_CameraTheta -= 0.01f*dx;
         g_CameraPhi   += 0.01f*dy;
-    
-        // Em coordenadas esféricas, o ângulo phi deve ficar entre -pi/2 e +pi/2.
-        float phimax = 3.141592f/2;
-        float phimin = -phimax;
-    
+
+        // Mantemos a câmera numa faixa de inclinação "estilo Pokémon GO":
+        // nunca totalmente de cima (top-down) nem abaixo do chão.
+        float phimax = 1.1f;   // ~63°: olhar mais de cima
+        float phimin = 0.25f;  // ~14°: olhar quase rente ao chão
+
         if (g_CameraPhi > phimax)
             g_CameraPhi = phimax;
-    
+
         if (g_CameraPhi < phimin)
             g_CameraPhi = phimin;
-    
+
         // Atualizamos as variáveis globais para armazenar a posição atual do
         // cursor como sendo a última posição conhecida do cursor.
         g_LastCursorPosX = xpos;
@@ -1412,7 +1550,7 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         g_TorsoPositionX = 0.0f;
         g_TorsoPositionY = 0.0f;
         g_CameraTheta = 0.0f;
-        g_CameraPhi = 1.0f;
+        g_CameraPhi = 0.6f;
         g_CameraDistance = 3.0f;
     }
 

@@ -13,15 +13,21 @@ in vec4 position_model;
 // Coordenadas de textura obtidas do arquivo OBJ (se existirem!)
 in vec2 texcoords;
 
+// Cor por vértice (modelos coloridos, ex.: boneco do jogador)
+in vec3 vertex_color;
+
 // Matrizes computadas no código C++ e enviadas para a GPU
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
 // Identificador que define qual objeto está sendo desenhado no momento
-#define CUBE    1
-#define PLANE   2
-#define PIKACHU 3
+#define CUBE         1
+#define PLANE        2
+#define PIKACHU      3
+#define TREE         4
+#define FOREST_WALL  5
+#define PLAYER       6
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -75,24 +81,48 @@ void main()
     {
         Kd0 = vec3(0.2, 0.45, 0.9);
     }
+    else if ( object_id == PLAYER )
+    {
+        // Boneco do jogador: cor vem direto dos vértices (paleta assada do modelo)
+        Kd0 = vertex_color;
+    }
     else if ( object_id == PIKACHU )
     {
         Kd0 = vec3(1.0, 0.8, 0.0);
     }
     else if ( object_id == PLANE )
     {
-        // Coordenadas de textura do plano, obtidas do arquivo OBJ.
+        float cityHalf = 5.0;
+
+        if (abs(position_world.x) <= cityHalf && abs(position_world.z) <= cityHalf)
+        {
+            // Região central: map.png
+            U = (position_world.x + cityHalf) / (2.0 * cityHalf);
+            V = (position_world.z + cityHalf) / (2.0 * cityHalf);
+            Kd0 = texture(TextureImage1, vec2(U, V)).rgb;
+        }
+        else
+        {
+            // Região externa: grama verde simples
+            Kd0 = vec3(0.22, 0.52, 0.18);
+        }
+    }
+    else if ( object_id == TREE )
+    {
+        Kd0 = vec3(0.15, 0.55, 0.15);
+    }
+    else if ( object_id == FOREST_WALL )
+    {
+        // Painéis verticais da floresta — textura normal (sem tile)
         U = texcoords.x;
         V = texcoords.y;
-
-		// Obtemos a refletância difusa a partir da leitura da imagem TextureImage1
-		Kd0 = texture(TextureImage1, vec2(U,V)).rgb;
+        Kd0 = texture(TextureImage2, vec2(U, V)).rgb;
     }
 
     // Equação de Iluminação
     float lambert = max(0,dot(n,l));
 
-    color.rgb = Kd0 * (lambert + 0.01);
+    color.rgb = Kd0 * (lambert + 0.25);
 
     // NOTE: Se você quiser fazer o rendering de objetos transparentes, é
     // necessário:
