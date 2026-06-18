@@ -32,6 +32,9 @@ uniform mat4 projection;
 #define POKESTOP_COOLDOWN 8
 #define GYM               9
 #define GYM_TOP           10
+#define ROCKET            11
+#define ROCKET_BASKET     12
+#define ROCKET_R          13
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -42,6 +45,7 @@ uniform vec4 bbox_max;
 uniform sampler2D TextureImage0;
 uniform sampler2D TextureImage1;
 uniform sampler2D TextureImage2;
+uniform sampler2D TextureImage3;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -130,6 +134,25 @@ void main()
         // Ginásio: cores assadas por parte no modelo (cor por vértice)
         Kd0 = vertex_color;
     }
+    else if ( object_id == ROCKET )
+    {
+        // Balão da Equipe Rocket: preto
+        Kd0 = vec3(0.06, 0.06, 0.07);
+    }
+    else if ( object_id == ROCKET_BASKET )
+    {
+        // Cesto do balão: marrom escuro
+        Kd0 = vec3(0.25, 0.17, 0.10);
+    }
+    else if ( object_id == ROCKET_R )
+    {
+        // "R" da Equipe Rocket: textura (R vermelho em fundo preto). Descartamos
+        // o fundo (fragmentos escuros) para mostrar só a letra sobre o balão.
+        vec3 rtex = texture(TextureImage3, texcoords).rgb;
+        if (rtex.r < 0.35)
+            discard;
+        Kd0 = rtex;
+    }
     else if ( object_id == FOREST_WALL )
     {
         // Painéis verticais da floresta — textura normal (sem tile)
@@ -138,10 +161,45 @@ void main()
         Kd0 = texture(TextureImage2, vec2(U, V)).rgb;
     }
 
-    // Equação de Iluminação
-    float lambert = max(0,dot(n,l));
+    // ===== Modelo de iluminação de Blinn-Phong =====
+    // (ambiente + difusa + especular), aplicado a todos os objetos.
 
-    color.rgb = Kd0 * (lambert + 0.25);
+    // Propriedades especulares do material. Por padrão um brilho moderado;
+    // objetos foscos (chão, grama, floresta, árvores) não têm especular.
+    vec3  Ks = vec3(0.30);  // refletância especular
+    float q  = 32.0;        // expoente especular (quanto maior, mais concentrado)
+
+    if ( object_id == PLANE || object_id == FOREST_WALL || object_id == TREE )
+    {
+        Ks = vec3(0.0);
+        q  = 1.0;
+    }
+    else if ( object_id == PIKACHU || object_id == POKESTOP || object_id == GYM_TOP )
+    {
+        // Pikachu e partes douradas/disco do PokéStop: mais "polidos"
+        Ks = vec3(0.5);
+        q  = 64.0;
+    }
+
+    // Intensidades da fonte de luz e da luz ambiente
+    vec3 I  = vec3(1.0, 1.0, 1.0); // espectro da fonte de luz
+    vec3 Ia = vec3(0.25);          // espectro da luz ambiente
+
+    // Reflectâncias ambiente e difusa derivadas da cor do objeto (Kd0)
+    vec3 Kd = Kd0;
+    vec3 Ka = Kd0;
+
+    // Vetor "half" de Blinn-Phong (bissetriz entre luz e câmera)
+    vec4 h = normalize(l + v);
+
+    float lambert  = max(0.0, dot(n, l));
+    float specular = pow(max(0.0, dot(n, h)), q);
+
+    vec3 ambient_term  = Ka * Ia;                 // termo ambiente
+    vec3 diffuse_term  = Kd * I * lambert;        // termo difuso (Lambert)
+    vec3 specular_term = Ks * I * specular;       // termo especular (Blinn-Phong)
+
+    color.rgb = ambient_term + diffuse_term + specular_term;
 
     // NOTE: Se você quiser fazer o rendering de objetos transparentes, é
     // necessário:

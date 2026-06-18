@@ -199,6 +199,20 @@ float g_CameraTheta = 0.0f; // Ângulo no plano ZX em relação ao eixo Z
 float g_CameraPhi = 0.6f;   // Ângulo em relação ao eixo Y (inclinação baixa estilo Pokémon GO)
 float g_CameraDistance = 3.0f; // Distância da câmera para a origem
 
+// Câmera livre: voa pelo cenário independente do jogador (posição com WASD na
+// direção da visada, direção com o mouse). Alternada com a tecla C.
+bool g_FreeCamera = false;
+glm::vec3 g_FreeCamPos = glm::vec3(0.0f, 2.5f, 4.5f);
+
+// Parâmetro de animação do balão da Equipe Rocket ao longo da curva de Bézier
+// (vai de 0 a 4: um valor inteiro por segmento de um loop com 4 Béziers cúbicas).
+float g_RocketT = 0.0f;
+
+// Detecção de clique no balão (mostra a mensagem do Giovanni).
+bool   g_BalloonClickCheck = false;
+double g_PressPosX = 0.0, g_PressPosY = 0.0; // posição do mouse ao apertar
+double g_ClickPosX = 0.0, g_ClickPosY = 0.0; // posição do clique (na soltura)
+
 // Variáveis que controlam rotação do antebraço
 float g_ForearmAngleZ = 0.0f;
 float g_ForearmAngleX = 0.0f;
@@ -220,6 +234,8 @@ bool g_KeyW = false;
 bool g_KeyA = false;
 bool g_KeyS = false;
 bool g_KeyD = false;
+bool g_KeyQ = false; // descer (câmera livre)
+bool g_KeyE = false; // subir  (câmera livre)
 
 // Variável que controla o tipo de projeção utilizada: perspectiva ou ortográfica.
 bool g_UsePerspectiveProjection = true;
@@ -293,6 +309,18 @@ std::string g_Message;
 float       g_MessageTimer = 0.0f; // segundos restantes mostrando a mensagem
 
 bool CheckCollision(float playerX, float playerZ, float playerHalfSize);
+
+// Avalia um ponto de uma curva de Bézier cúbica com pontos de controle
+// p0..p3 no parâmetro t em [0,1]:  B(t) = (1-t)^3 p0 + 3(1-t)^2 t p1
+//                                       + 3(1-t) t^2 p2 + t^3 p3
+glm::vec3 EvalCubicBezier(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t)
+{
+    float u = 1.0f - t;
+    return (u*u*u) * p0
+         + (3.0f*u*u*t) * p1
+         + (3.0f*u*t*t) * p2
+         + (t*t*t) * p3;
+}
 int FindCollidingEntityIndex(float playerX, float playerZ, float playerHalfSize);
 
 int main(int argc, char* argv[])
@@ -371,6 +399,7 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/red_brick_diff_1k.jpg"); // TextureImage0
     LoadTextureImage("../../data/map.png");               // TextureImage1
     LoadTextureImage("../../data/forest.png");            // TextureImage2 - floresta que tila fora do mapa
+    LoadTextureImage("../../data/rocket_r.png");          // TextureImage3 - "R" da Equipe Rocket no balão
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel cubemodel("../../data/cube.obj");
@@ -434,6 +463,9 @@ int main(int argc, char* argv[])
     #define POKESTOP_COOLDOWN 8
     #define GYM               9
     #define GYM_TOP           10
+    #define ROCKET            11
+    #define ROCKET_BASKET     12
+    #define ROCKET_R          13
 
     // Configuração dos objetos da cena (feita uma única vez, fora do loop)
     {
@@ -547,7 +579,33 @@ int main(int argc, char* argv[])
         float rightX   =  cos(g_CameraTheta);
         float rightZ   = -sin(g_CameraTheta);
 
-        if (g_CurrentScene == GameScene::World)
+        if (g_CurrentScene == GameScene::World && g_FreeCamera)
+        {
+            // Câmera livre: WASD movem na HORIZONTAL (forward/right projetados no
+            // plano do chão, então não afunda no mapa). E/Q sobem/descem.
+            float step = 2.5f * delta_t;
+            if (g_KeyW) g_FreeCamPos += glm::vec3(forwardX, 0.0f, forwardZ) * step;
+            if (g_KeyS) g_FreeCamPos -= glm::vec3(forwardX, 0.0f, forwardZ) * step;
+            if (g_KeyA) g_FreeCamPos -= glm::vec3(rightX, 0.0f, rightZ) * step;
+            if (g_KeyD) g_FreeCamPos += glm::vec3(rightX, 0.0f, rightZ) * step;
+            if (g_KeyE) g_FreeCamPos.y += step; // sobe
+            if (g_KeyQ) g_FreeCamPos.y -= step; // desce
+
+            // Trava de altura: não afunda no mapa nem sobe acima das árvores de
+            // borda (paredes de floresta vão de y=-1.1 até ~7.9).
+            const float FREECAM_MIN_Y = -0.8f;
+            const float FREECAM_MAX_Y =  7.5f; // ~topo das árvores de borda
+            if (g_FreeCamPos.y < FREECAM_MIN_Y) g_FreeCamPos.y = FREECAM_MIN_Y;
+            if (g_FreeCamPos.y > FREECAM_MAX_Y) g_FreeCamPos.y = FREECAM_MAX_Y;
+
+            // Trava horizontal: não passa dos contornos do mapa (paredes em ±5.5).
+            const float FREECAM_XZ_LIMIT = 5.2f;
+            if (g_FreeCamPos.x < -FREECAM_XZ_LIMIT) g_FreeCamPos.x = -FREECAM_XZ_LIMIT;
+            if (g_FreeCamPos.x >  FREECAM_XZ_LIMIT) g_FreeCamPos.x =  FREECAM_XZ_LIMIT;
+            if (g_FreeCamPos.z < -FREECAM_XZ_LIMIT) g_FreeCamPos.z = -FREECAM_XZ_LIMIT;
+            if (g_FreeCamPos.z >  FREECAM_XZ_LIMIT) g_FreeCamPos.z =  FREECAM_XZ_LIMIT;
+        }
+        else if (g_CurrentScene == GameScene::World)
         {
             if (g_KeyW) { nextPlayerX += forwardX * speed * delta_t; nextPlayerZ += forwardZ * speed * delta_t; }
             if (g_KeyS) { nextPlayerX -= forwardX * speed * delta_t; nextPlayerZ -= forwardZ * speed * delta_t; }
@@ -614,6 +672,17 @@ int main(int argc, char* argv[])
 
             camera_position_c = glm::vec4(captureCameraPosition, 1.0f);
             camera_lookat_l   = glm::vec4(targetCenter, 1.0f);
+        }
+        else if (g_FreeCamera)
+        {
+            // Câmera livre: posição própria (g_FreeCamPos) e direção dada pelos
+            // ângulos esféricos controlados pelo mouse. O ponto "lookat" é a
+            // posição da câmera somada ao vetor de direção (unitário).
+            float dx = -cos(g_CameraPhi)*sin(g_CameraTheta);
+            float dy = -sin(g_CameraPhi);
+            float dz = -cos(g_CameraPhi)*cos(g_CameraTheta);
+            camera_position_c = glm::vec4(g_FreeCamPos, 1.0f);
+            camera_lookat_l   = glm::vec4(g_FreeCamPos + glm::vec3(dx, dy, dz), 1.0f);
         }
         else
         {
@@ -905,6 +974,103 @@ int main(int argc, char* argv[])
             }
         }
 
+        // ---- Balão da Equipe Rocket: voa pelo céu por curva de Bézier cúbica --
+        {
+            // Loop fechado formado por 4 segmentos de Bézier cúbica que, juntos,
+            // aproximam um círculo no plano XZ a uma certa altitude (Y).
+            const float R  = 3.5f;            // raio do loop
+            const float kR = 0.5523f * R;     // "handle" p/ aproximar 1/4 de círculo
+            const float Y  = 1.4f;            // altitude do balão
+            glm::vec3 ctrl[4][4] = {
+                { glm::vec3(R,Y,0),  glm::vec3(R,Y,kR),   glm::vec3(kR,Y,R),   glm::vec3(0,Y,R)   },
+                { glm::vec3(0,Y,R),  glm::vec3(-kR,Y,R),  glm::vec3(-R,Y,kR),  glm::vec3(-R,Y,0)  },
+                { glm::vec3(-R,Y,0), glm::vec3(-R,Y,-kR), glm::vec3(-kR,Y,-R), glm::vec3(0,Y,-R)  },
+                { glm::vec3(0,Y,-R), glm::vec3(kR,Y,-R),  glm::vec3(R,Y,-kR),  glm::vec3(R,Y,0)   },
+            };
+
+            // Avança o parâmetro (loop completo a cada ~24 s) e o mantém em [0,4).
+            g_RocketT += delta_t * (4.0f / 24.0f);
+            while (g_RocketT >= 4.0f) g_RocketT -= 4.0f;
+
+            int   seg = (int)g_RocketT;          // segmento atual (0..3)
+            float lt  = g_RocketT - (float)seg;  // parâmetro local na Bézier (0..1)
+            glm::vec3 bp = EvalCubicBezier(ctrl[seg][0], ctrl[seg][1], ctrl[seg][2], ctrl[seg][3], lt);
+
+            // Balanço suave (bob) só para dar vida
+            float bob = sinf((float)glfwGetTime() * 1.5f) * 0.08f;
+
+            // Envelope do balão (esfera)
+            model = Matrix_Translate(bp.x, bp.y + bob, bp.z)
+                  * Matrix_Scale(0.45f, 0.55f, 0.45f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, ROCKET);
+            DrawVirtualObject("the_sphere");
+
+            // "R" da Equipe Rocket: quadradinho texturizado (rocket_r.png) colado
+            // na frente do envelope, girando em Y para sempre encarar a câmera.
+            {
+                float angR = atan2(camera_position_c.x - bp.x, camera_position_c.z - bp.z);
+                model = Matrix_Translate(bp.x, bp.y + bob, bp.z)
+                      * Matrix_Rotate_Y(angR)
+                      * Matrix_Translate(0.0f, 0.0f, 0.47f) // à frente da superfície
+                      * Matrix_Rotate_X(3.141592f / 2.0f)   // deixa o quad em pé
+                      * Matrix_Scale(0.22f, 1.0f, 0.26f);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, ROCKET_R);
+                DrawVirtualObject("the_plane");
+            }
+
+            // 4 cordas finas ligando o envelope ao cesto (cubos esticados)
+            float ropeCenterY = bp.y + bob - 0.70f;
+            for (int sx = -1; sx <= 1; sx += 2)
+            for (int sz = -1; sz <= 1; sz += 2)
+            {
+                model = Matrix_Translate(bp.x + sx*0.11f, ropeCenterY, bp.z + sz*0.11f)
+                      * Matrix_Scale(0.012f, 0.34f, 0.012f);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, ROCKET_BASKET);
+                DrawVirtualObject("the_cube");
+            }
+
+            // Cesto pendurado mais abaixo (cubo)
+            model = Matrix_Translate(bp.x, bp.y + bob - 0.95f, bp.z)
+                  * Matrix_Scale(0.16f, 0.16f, 0.16f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, ROCKET_BASKET);
+            DrawVirtualObject("the_cube");
+
+            // ---- Clique no balão -> mensagem do Giovanni ----
+            if (g_BalloonClickCheck)
+            {
+                g_BalloonClickCheck = false;
+
+                // Projeta o centro do balão para coordenadas de tela (pixels da janela)
+                glm::vec4 clip = projection * view * glm::vec4(bp.x, bp.y + bob, bp.z, 1.0f);
+                if (clip.w > 0.0f)
+                {
+                    glm::vec3 ndc = glm::vec3(clip) / clip.w;
+                    int ww, wh;
+                    glfwGetWindowSize(window, &ww, &wh);
+                    float sx = (ndc.x*0.5f + 0.5f) * ww;
+                    float sy = (1.0f - (ndc.y*0.5f + 0.5f)) * wh;
+
+                    // Raio de acerto em pixels: tamanho projetado do balão (centro->topo)
+                    glm::vec4 clipTop = projection * view * glm::vec4(bp.x, bp.y + bob + 0.55f, bp.z, 1.0f);
+                    glm::vec3 ndcTop  = glm::vec3(clipTop) / clipTop.w;
+                    float syTop = (1.0f - (ndcTop.y*0.5f + 0.5f)) * wh;
+                    float hitR  = fabs(sy - syTop) + 8.0f;
+
+                    float ddx = (float)g_ClickPosX - sx;
+                    float ddy = (float)g_ClickPosY - sy;
+                    if (ddx*ddx + ddy*ddy < hitR*hitR)
+                    {
+                        g_Message      = "Giovanni nao esta aqui!";
+                        g_MessageTimer = 2.5f;
+                    }
+                }
+            }
+        }
+
         // Tela de captura (trabalho do parceiro): botão de sair
         if (g_CurrentScene == GameScene::Capture)
         {
@@ -927,6 +1093,13 @@ int main(int argc, char* argv[])
             char inv[128];
             snprintf(inv, sizeof(inv), "Pokebolas: %d   Pocoes: %d", g_NumPokeballs, g_NumPotions);
             TextRendering_PrintString(window, inv, -0.98f, 0.90f, 1.0f);
+
+            // Indicador do modo de câmera (tecla C alterna)
+            TextRendering_PrintString(
+                window,
+                g_FreeCamera ? "[C] Camera: Livre  (WASD move, E/Q sobe/desce)"
+                             : "[C] Camera: 3a pessoa",
+                -0.98f, 0.84f, 1.0f);
 
             if (g_MessageTimer > 0.0f)
                 TextRendering_PrintString(window, g_Message, -0.45f, 0.80f, 1.5f);
@@ -1129,6 +1302,7 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage0"), 0);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage1"), 1);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage2"), 2);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage3"), 3);
     glUseProgram(0);
 }
 
@@ -1632,6 +1806,8 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
         // g_LeftMouseButtonPressed como true, para saber que o usuário está
         // com o botão esquerdo pressionado.
         glfwGetCursorPos(window, &g_LastCursorPosX, &g_LastCursorPosY);
+        g_PressPosX = g_LastCursorPosX; // guardamos onde o clique começou
+        g_PressPosY = g_LastCursorPosY;
 
         if (g_CurrentScene == GameScene::Capture)
         {
@@ -1664,6 +1840,23 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
         // Quando o usuário soltar o botão esquerdo do mouse, atualizamos a
         // variável abaixo para false.
         g_LeftMouseButtonPressed = false;
+
+        // Se o cursor quase não se moveu desde o pressionar, foi um "clique"
+        // (não um arrasto de câmera). No mapa, marcamos para testar se acertou
+        // o balão (o teste em si é feito no loop, onde temos as matrizes).
+        if (g_CurrentScene == GameScene::World)
+        {
+            double cx, cy;
+            glfwGetCursorPos(window, &cx, &cy);
+            double mdx = cx - g_PressPosX;
+            double mdy = cy - g_PressPosY;
+            if (mdx*mdx + mdy*mdy < 25.0) // < 5 px de movimento
+            {
+                g_BalloonClickCheck = true;
+                g_ClickPosX = cx;
+                g_ClickPosY = cy;
+            }
+        }
     }
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
     {
@@ -1859,6 +2052,21 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         g_UsePerspectiveProjection = false;
     }
 
+    // Tecla C: alterna entre câmera em 3ª pessoa (segue o jogador) e câmera livre.
+    if (key == GLFW_KEY_C && action == GLFW_PRESS)
+    {
+        g_FreeCamera = !g_FreeCamera;
+        if (g_FreeCamera)
+        {
+            // Inicia a câmera livre na posição atual da câmera orbital (sem "pulo").
+            float r  = g_CameraDistance;
+            float yy = r*sin(g_CameraPhi);
+            float zz = r*cos(g_CameraPhi)*cos(g_CameraTheta);
+            float xx = r*cos(g_CameraPhi)*sin(g_CameraTheta);
+            g_FreeCamPos = glm::vec3(xx + g_PlayerX, yy, zz + g_PlayerZ);
+        }
+    }
+
     // Se o usuário apertar a tecla H, fazemos um "toggle" do texto informativo mostrado na tela.
     if (key == GLFW_KEY_H && action == GLFW_PRESS)
     {
@@ -1882,6 +2090,12 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         g_KeyA = (action != GLFW_RELEASE);
     if (key == GLFW_KEY_D || key == GLFW_KEY_RIGHT)
         g_KeyD = (action != GLFW_RELEASE);
+
+    // Q/E: descer/subir na câmera livre
+    if (key == GLFW_KEY_Q)
+        g_KeyQ = (action != GLFW_RELEASE);
+    if (key == GLFW_KEY_E)
+        g_KeyE = (action != GLFW_RELEASE);
 }
 
 // Definimos o callback para impressão de erros da GLFW no terminal
