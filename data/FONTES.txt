@@ -6,3 +6,7 @@ https://poly.pizza/m/5EGWBMpuXq
 https://quaternius.com/
 Observacao: modelo original em GLB; convertido para OBJ e com as cores da paleta
 assadas como cor-por-vertice (linhas "v x y z r g b").
+
+Ginasio (gym.obj) - modelo do PokeGym (impressao 3D), partes STL em data/gym/gym/
+montadas e convertidas para um unico OBJ com cores por vertice.
+https://www.dorchester3d.com/pt/impressao/blogue/2016/08/pokemon-go-gym

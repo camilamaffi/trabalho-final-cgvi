@@ -28,6 +28,10 @@ uniform mat4 projection;
 #define TREE         4
 #define FOREST_WALL  5
 #define PLAYER       6
+#define POKESTOP          7
+#define POKESTOP_COOLDOWN 8
+#define GYM               9
+#define GYM_TOP           10
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -110,6 +114,21 @@ void main()
     else if ( object_id == TREE )
     {
         Kd0 = vec3(0.15, 0.55, 0.15);
+    }
+    else if ( object_id == POKESTOP )
+    {
+        // PokéStop disponível: azul/ciano vibrante
+        Kd0 = vec3(0.2, 0.6, 0.95);
+    }
+    else if ( object_id == POKESTOP_COOLDOWN )
+    {
+        // PokéStop em cooldown: cinza apagado
+        Kd0 = vec3(0.4, 0.42, 0.45);
+    }
+    else if ( object_id == GYM )
+    {
+        // Ginásio: cores assadas por parte no modelo (cor por vértice)
+        Kd0 = vertex_color;
     }
     else if ( object_id == FOREST_WALL )
     {

@@ -260,6 +260,29 @@ struct SceneEntity
 
 std::vector<SceneEntity> g_Entities;
 
+// ---- PokéStops e inventário -------------------------------------------------
+// Um PokéStop é um ponto no mapa que, ao ser alcançado pelo jogador, fornece
+// itens (Pokébola, Poção) e entra em "cooldown" antes de poder ser usado de novo.
+struct PokeStop
+{
+    glm::vec3 position;
+    float     cooldown; // tempo restante até reabilitar (0 = disponível)
+};
+
+std::vector<PokeStop> g_PokeStops;
+
+// Ginásios: por enquanto só a estrutura (sem Pokémon). Guardamos só a posição
+// na base (no chão); a estrutura é montada com primitivas no loop de desenho.
+std::vector<glm::vec3> g_Gyms;
+
+// Inventário do jogador
+int g_NumPokeballs = 0;
+int g_NumPotions   = 0;
+
+// Mensagem temporária mostrada na tela (ex.: "PokéStop! +2 Pokébola")
+std::string g_Message;
+float       g_MessageTimer = 0.0f; // segundos restantes mostrando a mensagem
+
 bool CheckCollision(float playerX, float playerZ, float playerHalfSize);
 
 int main(int argc, char* argv[])
@@ -358,6 +381,22 @@ int main(int argc, char* argv[])
     ComputeNormals(&adventurermodel);
     BuildTrianglesAndAddToVirtualScene(&adventurermodel);
 
+    // Esfera (usada achatada como o disco redondo do PokéStop).
+    ObjModel spheremodel("../../data/sphere.obj");
+    ComputeNormals(&spheremodel);
+    BuildTrianglesAndAddToVirtualScene(&spheremodel);
+
+    // Anel (torus) que circunda o disco do PokéStop. Gerado proceduralmente.
+    ObjModel torusmodel("../../data/torus.obj");
+    ComputeNormals(&torusmodel);
+    BuildTrianglesAndAddToVirtualScene(&torusmodel);
+
+    // Ginásio: modelo do PokéGym montado a partir dos STLs em data/gym/
+    // (peças convertidas/montadas em um único OBJ com cores por vértice).
+    ObjModel gymmodel("../../data/gym.obj");
+    ComputeNormals(&gymmodel);
+    BuildTrianglesAndAddToVirtualScene(&gymmodel);
+
     if ( argc > 1 )
     {
         ObjModel model(argv[1]);
@@ -375,12 +414,16 @@ int main(int argc, char* argv[])
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
-    #define CUBE         1
-    #define PLANE        2
-    #define PIKACHU      3
-    #define TREE         4
-    #define FOREST_WALL  5
-    #define PLAYER       6
+    #define CUBE              1
+    #define PLANE             2
+    #define PIKACHU           3
+    #define TREE              4
+    #define FOREST_WALL       5
+    #define PLAYER            6
+    #define POKESTOP          7
+    #define POKESTOP_COOLDOWN 8
+    #define GYM               9
+    #define GYM_TOP           10
 
     // Configuração dos objetos da cena (feita uma única vez, fora do loop)
     {
@@ -417,6 +460,38 @@ int main(int argc, char* argv[])
         plane.collidable = false;
         g_Entities.push_back(plane);
 
+        // PokéStops espalhados pelo mapa: 13 instâncias da mesma malha base.
+        const glm::vec3 pokestopSpots[] = {
+            glm::vec3( 1.8f, -1.1f,  1.5f),
+            glm::vec3(-2.2f, -1.1f, -0.8f),
+            glm::vec3( 0.2f, -1.1f, -2.8f),
+            glm::vec3(-3.0f, -1.1f,  2.4f),
+            glm::vec3( 1.0f, -1.1f, -1.0f),
+            glm::vec3(-1.0f, -1.1f,  1.0f),
+            glm::vec3( 2.6f, -1.1f,  0.8f),
+            glm::vec3(-2.8f, -1.1f, -2.6f),
+            glm::vec3( 1.4f, -1.1f,  3.0f),
+            glm::vec3(-1.6f, -1.1f,  3.2f),
+            glm::vec3( 3.4f, -1.1f, -1.0f),
+            glm::vec3(-3.6f, -1.1f,  0.4f),
+            glm::vec3( 2.0f, -1.1f, -3.2f),
+        };
+
+        for (const glm::vec3& spot : pokestopSpots)
+        {
+            PokeStop stop;
+            stop.position = spot;
+            stop.cooldown = 0.0f;
+            g_PokeStops.push_back(stop);
+        }
+
+        // Ginásios (só a estrutura por enquanto): 5 instâncias do mesmo modelo,
+        // espalhadas pelo mapa. Posições no chão (y = -1.1).
+        g_Gyms.push_back(glm::vec3( 3.7f, -1.1f, -3.5f));
+        g_Gyms.push_back(glm::vec3(-3.9f, -1.1f,  3.6f));
+        g_Gyms.push_back(glm::vec3(-4.0f, -1.1f, -3.7f));
+        g_Gyms.push_back(glm::vec3( 4.1f, -1.1f,  3.4f));
+        g_Gyms.push_back(glm::vec3( 0.0f, -1.1f,  4.3f));
     }
 
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
@@ -665,6 +740,103 @@ int main(int argc, char* argv[])
             DrawVirtualObject("the_plane");
         }
 
+        // ---- PokéStops: cooldown, coleta por proximidade e desenho ----------
+        {
+            float now = (float)glfwGetTime();
+            const float COLLECT_RADIUS         = 0.8f;  // distância para coletar
+            const float POKESTOP_COOLDOWN_TIME = 60.0f; // segundos para reabilitar (1 min)
+            const int   ITEM_MAX               = 100;   // estoque máximo por item
+
+            for (PokeStop& stop : g_PokeStops)
+            {
+                // Atualiza o cooldown com base no tempo
+                if (stop.cooldown > 0.0f)
+                {
+                    stop.cooldown -= delta_t;
+                    if (stop.cooldown < 0.0f)
+                        stop.cooldown = 0.0f;
+                }
+
+                // Teste de intersecção (proximidade) jogador <-> PokéStop
+                float dx = g_PlayerX - stop.position.x;
+                float dz = g_PlayerZ - stop.position.z;
+                float dist = sqrtf(dx*dx + dz*dz);
+
+                if (stop.cooldown <= 0.0f && dist < COLLECT_RADIUS)
+                {
+                    // Coleta: ganha itens (respeitando o estoque máximo) e entra em cooldown
+                    int gainedBalls   = std::min(2, ITEM_MAX - g_NumPokeballs);
+                    int gainedPotions = std::min(1, ITEM_MAX - g_NumPotions);
+                    g_NumPokeballs += gainedBalls;
+                    g_NumPotions   += gainedPotions;
+                    stop.cooldown   = POKESTOP_COOLDOWN_TIME;
+
+                    char buf[128];
+                    if (gainedBalls == 0 && gainedPotions == 0)
+                        snprintf(buf, sizeof(buf), "PokeStop: mochila cheia!");
+                    else
+                        snprintf(buf, sizeof(buf), "PokeStop! +%d Pokebola, +%d Pocao", gainedBalls, gainedPotions);
+                    g_Message      = buf;
+                    g_MessageTimer = 2.5f;
+                }
+
+                bool available = (stop.cooldown <= 0.0f);
+                int  stop_id   = available ? POKESTOP : POKESTOP_COOLDOWN;
+
+                // Poste (base) do PokéStop
+                const float postH = 0.5f;
+                model = Matrix_Translate(stop.position.x, stop.position.y + postH*0.5f, stop.position.z)
+                      * Matrix_Scale(0.05f, postH, 0.05f);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, stop_id);
+                DrawVirtualObject("the_cube");
+
+                // Centro do disco/anel (em pé, acima do poste)
+                float discCY = stop.position.y + postH + 0.18f;
+
+                // Disco redondo EM PÉ (esfera achatada na profundidade: redonda
+                // no plano X-Y, fina em Z). Gira em torno do eixo Y.
+                float discSpin = available ? now * 2.0f : 0.0f;
+                model = Matrix_Translate(stop.position.x, discCY, stop.position.z)
+                      * Matrix_Rotate_Y(discSpin)
+                      * Matrix_Scale(0.16f, 0.16f, 0.05f);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, stop_id);
+                DrawVirtualObject("the_sphere");
+
+                // Anel ao redor do disco — gira num eixo diferente (separado),
+                // mais devagar e em torno do eixo X (tomba para frente/trás).
+                float ringSpin = available ? now * 1.1f : 0.0f;
+                model = Matrix_Translate(stop.position.x, discCY, stop.position.z)
+                      * Matrix_Rotate_X(ringSpin)
+                      * Matrix_Scale(0.19f, 0.19f, 0.19f);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, stop_id);
+                DrawVirtualObject("the_ring");
+            }
+
+            // Atualiza o tempo restante da mensagem na tela
+            if (g_MessageTimer > 0.0f)
+            {
+                g_MessageTimer -= delta_t;
+                if (g_MessageTimer < 0.0f)
+                    g_MessageTimer = 0.0f;
+            }
+        }
+
+        // ---- Ginásios: modelo do PokéGym (sem Pokémon por enquanto) ---------
+        {
+            const float GYM_SIZE = 1.4f; // altura do modelo (normalizado p/ 1.0)
+            for (const glm::vec3& gym : g_Gyms)
+            {
+                model = Matrix_Translate(gym.x, gym.y, gym.z) // pés no chão
+                      * Matrix_Scale(GYM_SIZE, GYM_SIZE, GYM_SIZE);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, GYM);
+                DrawVirtualObject("the_gym");
+            }
+        }
+
         // Imprimimos na tela os ângulos de Euler que controlam a rotação do
         // terceiro cubo.
         TextRendering_ShowEulerAngles(window);
@@ -675,6 +847,16 @@ int main(int argc, char* argv[])
         // Imprimimos na tela informação sobre o número de quadros renderizados
         // por segundo (frames per second).
         TextRendering_ShowFramesPerSecond(window);
+
+        // HUD: inventário (sempre visível) e mensagem temporária dos PokéStops.
+        {
+            char inv[128];
+            snprintf(inv, sizeof(inv), "Pokebolas: %d   Pocoes: %d", g_NumPokeballs, g_NumPotions);
+            TextRendering_PrintString(window, inv, -0.98f, 0.90f, 1.0f);
+
+            if (g_MessageTimer > 0.0f)
+                TextRendering_PrintString(window, g_Message, -0.45f, 0.80f, 1.5f);
+        }
 
         // O framebuffer onde OpenGL executa as operações de renderização não
         // é o mesmo que está sendo mostrado para o usuário, caso contrário
