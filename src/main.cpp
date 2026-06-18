@@ -227,6 +227,15 @@ bool g_UsePerspectiveProjection = true;
 // Variável que controla se o texto informativo será mostrado na tela.
 bool g_ShowInfoText = true;
 
+enum class GameScene
+{
+    World,
+    Capture
+};
+
+GameScene g_CurrentScene = GameScene::World;
+int g_CaptureTargetIndex = -1;
+
 // Variáveis que definem um programa de GPU (shaders). Veja função LoadShadersFromFiles().
 GLuint g_GpuProgramID = 0;
 GLint g_model_uniform;
@@ -261,6 +270,7 @@ struct SceneEntity
 std::vector<SceneEntity> g_Entities;
 
 bool CheckCollision(float playerX, float playerZ, float playerHalfSize);
+int FindCollidingEntityIndex(float playerX, float playerZ, float playerHalfSize);
 
 int main(int argc, char* argv[])
 {
@@ -462,28 +472,49 @@ int main(int argc, char* argv[])
         float rightX   =  cos(g_CameraTheta);
         float rightZ   = -sin(g_CameraTheta);
 
-        if (g_KeyW) { nextPlayerX += forwardX * speed * delta_t; nextPlayerZ += forwardZ * speed * delta_t; }
-        if (g_KeyS) { nextPlayerX -= forwardX * speed * delta_t; nextPlayerZ -= forwardZ * speed * delta_t; }
-        if (g_KeyA) { nextPlayerX -= rightX * speed * delta_t;   nextPlayerZ -= rightZ * speed * delta_t; }
-        if (g_KeyD) { nextPlayerX += rightX * speed * delta_t;   nextPlayerZ += rightZ * speed * delta_t; }
+        if (g_CurrentScene == GameScene::World)
+        {
+            if (g_KeyW) { nextPlayerX += forwardX * speed * delta_t; nextPlayerZ += forwardZ * speed * delta_t; }
+            if (g_KeyS) { nextPlayerX -= forwardX * speed * delta_t; nextPlayerZ -= forwardZ * speed * delta_t; }
+            if (g_KeyA) { nextPlayerX -= rightX * speed * delta_t;   nextPlayerZ -= rightZ * speed * delta_t; }
+            if (g_KeyD) { nextPlayerX += rightX * speed * delta_t;   nextPlayerZ += rightZ * speed * delta_t; }
 
-        // Avatar olha para a direção em que está andando (estilo Pokémon GO).
-        // Calculamos o yaw a partir do vetor de movimento desejado neste frame.
-        float moveDirX = nextPlayerX - g_PlayerX;
-        float moveDirZ = nextPlayerZ - g_PlayerZ;
-        if (fabs(moveDirX) > 1e-5f || fabs(moveDirZ) > 1e-5f)
-            g_PlayerAngleY = atan2(moveDirX, moveDirZ);
+            // Avatar olha para a direção em que está andando (estilo Pokémon GO).
+            // Calculamos o yaw a partir do vetor de movimento desejado neste frame.
+            float moveDirX = nextPlayerX - g_PlayerX;
+            float moveDirZ = nextPlayerZ - g_PlayerZ;
+            if (fabs(moveDirX) > 1e-5f || fabs(moveDirZ) > 1e-5f)
+                g_PlayerAngleY = atan2(moveDirX, moveDirZ);
 
-        // Colisão com todos os objetos registrados
-        float playerHalfSize = 0.075f;
-
-        if (!CheckCollision(
+            // Colisão com todos os objetos registrados
+            float playerHalfSize = 0.075f;
+            int collidingEntityIndex = FindCollidingEntityIndex(
                 nextPlayerX,
                 nextPlayerZ,
-                playerHalfSize))
+                playerHalfSize);
+
+            if (collidingEntityIndex == -1)
+            {
+                g_PlayerX = nextPlayerX;
+                g_PlayerZ = nextPlayerZ;
+            }
+            else
+            {
+                const SceneEntity& collidingEntity = g_Entities[collidingEntityIndex];
+                if (collidingEntity.object_id == PIKACHU)
+                {
+                    g_CurrentScene = GameScene::Capture;
+                    g_CaptureTargetIndex = collidingEntityIndex;
+                }
+            }
+        }
+
+        if (g_CurrentScene == GameScene::Capture
+            && (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS
+                || glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS))
         {
-            g_PlayerX = nextPlayerX;
-            g_PlayerZ = nextPlayerZ;
+            g_CurrentScene = GameScene::World;
+            g_CaptureTargetIndex = -1;
         }
 
         // Limite de segurança (árvores bloqueiam em ~±4.4, isso é só backstop)
@@ -495,17 +526,34 @@ int main(int argc, char* argv[])
         if (g_PlayerZ < -MAP_LIMIT) g_PlayerZ = -MAP_LIMIT;
         if (g_PlayerZ >  MAP_LIMIT) g_PlayerZ =  MAP_LIMIT;
 
-        float r = g_CameraDistance;
-        float y = r*sin(g_CameraPhi);
-        float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
-        float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
+        glm::vec4 camera_position_c;
+        glm::vec4 camera_lookat_l;
+        glm::vec4 camera_view_vector;
+        glm::vec4 camera_up_vector = glm::vec4(0.0f,1.0f,0.0f,0.0f);
 
-        // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
-        // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-        glm::vec4 camera_position_c  = glm::vec4(x + g_PlayerX, y, z + g_PlayerZ, 1.0f); // Ponto "c", centro da câmera
-        glm::vec4 camera_lookat_l    = glm::vec4(g_PlayerX, 0.0f, g_PlayerZ, 1.0f); // Câmera segue o personagem
-        glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
-        glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
+        if (g_CurrentScene == GameScene::Capture && g_CaptureTargetIndex >= 0)
+        {
+            const SceneEntity& target = g_Entities[g_CaptureTargetIndex];
+            glm::vec3 targetCenter = glm::vec3(target.position.x, target.position.y + 0.25f, target.position.z);
+            glm::vec3 captureCameraPosition = targetCenter + glm::vec3(0.9f, 0.35f, 0.0f);
+
+            camera_position_c = glm::vec4(captureCameraPosition, 1.0f);
+            camera_lookat_l   = glm::vec4(targetCenter, 1.0f);
+        }
+        else
+        {
+            float r = g_CameraDistance;
+            float y = r*sin(g_CameraPhi);
+            float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
+            float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
+
+            // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
+            // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
+            camera_position_c  = glm::vec4(x + g_PlayerX, y, z + g_PlayerZ, 1.0f); // Ponto "c", centro da câmera
+            camera_lookat_l    = glm::vec4(g_PlayerX, 0.0f, g_PlayerZ, 1.0f); // Câmera segue o personagem
+        }
+
+        camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
 
         // Computamos a matriz "View" utilizando os parâmetros da câmera para
         // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
@@ -549,36 +597,48 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
 
         // desenha o jogador
+        if (g_CurrentScene != GameScene::Capture)
+        {
+            // Boneco do jogador. O modelo tem ~1.86 de altura e os pés na origem
+            // (y=0), então o escalamos e o posicionamos sobre o chão (y = -1.1).
+            // PLAYER_FACING_OFFSET: ajuste fino caso o boneco ande "de costas"
+            // (some 3.1415927f para girar 180°).
+            const float PLAYER_SCALE = 0.22f;
+            const float PLAYER_FACING_OFFSET = 0.0f;
 
-        // Boneco do jogador. O modelo tem ~1.86 de altura e os pés na origem
-        // (y=0), então o escalamos e o posicionamos sobre o chão (y = -1.1).
-        // PLAYER_FACING_OFFSET: ajuste fino caso o boneco ande "de costas"
-        // (some 3.1415927f para girar 180°).
-        const float PLAYER_SCALE = 0.22f;
-        const float PLAYER_FACING_OFFSET = 0.0f;
+            model =
+                Matrix_Translate(g_PlayerX, -1.1f, g_PlayerZ)
+                *
+                Matrix_Rotate_Y(g_PlayerAngleY + PLAYER_FACING_OFFSET)
+                *
+                Matrix_Scale(PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE);
 
-        model =
-            Matrix_Translate(g_PlayerX, -1.1f, g_PlayerZ)
-            *
-            Matrix_Rotate_Y(g_PlayerAngleY + PLAYER_FACING_OFFSET)
-            *
-            Matrix_Scale(PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE);
+            glUniformMatrix4fv(
+                g_model_uniform,
+                1,
+                GL_FALSE,
+                glm::value_ptr(model));
 
-        glUniformMatrix4fv(
-            g_model_uniform,
-            1,
-            GL_FALSE,
-            glm::value_ptr(model));
+            glUniform1i(
+                g_object_id_uniform,
+                PLAYER);
 
-        glUniform1i(
-            g_object_id_uniform,
-            PLAYER);
-
-        DrawVirtualObject("player_character");
+            DrawVirtualObject("player_character");
+        }
 
         // desenha todos os objetos da cena
-        for (const auto& obj : g_Entities)
+        float captureFacingAngle = 0.0f;
+        if (g_CurrentScene == GameScene::Capture && g_CaptureTargetIndex >= 0)
         {
+            const SceneEntity& target = g_Entities[g_CaptureTargetIndex];
+            glm::vec3 targetCenter = glm::vec3(target.position.x, target.position.y + 0.25f, target.position.z);
+            glm::vec3 captureDirection = camera_position_c - glm::vec4(targetCenter, 1.0f);
+            captureFacingAngle = atan2(captureDirection.x, captureDirection.z);
+        }
+
+        for (size_t i = 0; i < g_Entities.size(); ++i)
+        {
+            const SceneEntity& obj = g_Entities[i];
             // Fator de visibilidade por aproximação (estilo Pokémon GO).
             // appearRadius == 0  -> sempre visível.
             // appearRadius  > 0  -> surge/some suavemente conforme a distância.
@@ -603,6 +663,14 @@ int main(int argc, char* argv[])
                     obj.position.x,
                     obj.position.y,
                     obj.position.z)
+                *
+                (
+                    (g_CurrentScene == GameScene::Capture
+                     && g_CaptureTargetIndex == static_cast<int>(i)
+                     && obj.object_id == PIKACHU)
+                    ? Matrix_Rotate_Y(captureFacingAngle)
+                    : Matrix_Identity()
+                )
                 *
                 Matrix_Scale(
                     obj.scale.x * appearScale,
@@ -665,6 +733,11 @@ int main(int argc, char* argv[])
             DrawVirtualObject("the_plane");
         }
 
+        if (g_CurrentScene == GameScene::Capture)
+        {
+            TextRendering_PrintString(window, "[ Sair ]", 0.58f, 0.90f, 1.0f);
+        }
+
         // Imprimimos na tela os ângulos de Euler que controlam a rotação do
         // terceiro cubo.
         TextRendering_ShowEulerAngles(window);
@@ -698,11 +771,11 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-// função para verificar colisao entre o personagem e os objetos do cenario
-bool CheckCollision(float playerX, float playerZ, float playerHalfSize)
+int FindCollidingEntityIndex(float playerX, float playerZ, float playerHalfSize)
 {
-    for (const auto& obj : g_Entities)
+    for (size_t i = 0; i < g_Entities.size(); ++i)
     {
+        const SceneEntity& obj = g_Entities[i];
         if (!obj.collidable)
             continue;
 
@@ -728,10 +801,16 @@ bool CheckCollision(float playerX, float playerZ, float playerHalfSize)
             < (playerHalfSize + objHalfZ);
 
         if (collisionX && collisionZ)
-            return true;
+            return static_cast<int>(i);
     }
 
-    return false;
+    return -1;
+}
+
+// função para verificar colisao entre o personagem e os objetos do cenario
+bool CheckCollision(float playerX, float playerZ, float playerHalfSize)
+{
+    return FindCollidingEntityIndex(playerX, playerZ, playerHalfSize) != -1;
 }
 
 // Função que carrega uma imagem para ser utilizada como textura
@@ -1370,6 +1449,31 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
         // g_LeftMouseButtonPressed como true, para saber que o usuário está
         // com o botão esquerdo pressionado.
         glfwGetCursorPos(window, &g_LastCursorPosX, &g_LastCursorPosY);
+
+        if (g_CurrentScene == GameScene::Capture)
+        {
+            int width, height;
+            glfwGetWindowSize(window, &width, &height);
+
+            double xpos = g_LastCursorPosX;
+            double ypos = g_LastCursorPosY;
+
+            float ndcX = static_cast<float>(2.0 * xpos / width - 1.0);
+            float ndcY = static_cast<float>(1.0 - 2.0 * ypos / height);
+
+            const float button_left   = 0.50f;
+            const float button_right  = 0.72f;
+            const float button_bottom = 0.82f;
+            const float button_top    = 0.95f;
+
+            if (ndcX >= button_left && ndcX <= button_right
+                && ndcY >= button_bottom && ndcY <= button_top)
+            {
+                g_CurrentScene = GameScene::World;
+                g_CaptureTargetIndex = -1;
+            }
+        }
+
         g_LeftMouseButtonPressed = true;
     }
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
@@ -1511,9 +1615,15 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     Correcao_KeyCallback(key, action, mod);
     // =======================
 
-    // Se o usuário pressionar a tecla ESC, fechamos a janela.
+    // Se o usuário pressionar ESC na cena de captura, apenas sai da cena.
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, GL_TRUE);
+    {
+        if (g_CurrentScene == GameScene::Capture)
+        {
+            g_CurrentScene = GameScene::World;
+            g_CaptureTargetIndex = -1;
+        }
+    }
 
     // O código abaixo implementa a seguinte lógica:
     //   Se apertar tecla X       então g_AngleX += delta;
