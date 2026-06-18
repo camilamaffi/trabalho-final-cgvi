@@ -396,9 +396,11 @@ int main(int argc, char* argv[])
     //
     LoadShadersFromFiles();
 
+    // FONTE: textura red_brick de Poly Haven (CC0): https://polyhaven.com/a/red_brick
     LoadTextureImage("../../data/red_brick_diff_1k.jpg"); // TextureImage0
     LoadTextureImage("../../data/map.png");               // TextureImage1
     LoadTextureImage("../../data/forest.png");            // TextureImage2 - floresta que tila fora do mapa
+    // rocket_r.png: gerada pela dupla com Python/PIL (fonte Arial Black) — sem fonte externa
     LoadTextureImage("../../data/rocket_r.png");          // TextureImage3 - "R" da Equipe Rocket no balão
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
@@ -406,6 +408,7 @@ int main(int argc, char* argv[])
     ComputeNormals(&cubemodel);
     BuildTrianglesAndAddToVirtualScene(&cubemodel);
 
+    // pikachu_final.obj: modelo feito pela própria dupla (sem fonte externa).
     ObjModel pikachumodel("../../data/pikachu_final.obj");
     ComputeNormals(&pikachumodel);
     BuildTrianglesAndAddToVirtualScene(&pikachumodel);
@@ -414,8 +417,11 @@ int main(int argc, char* argv[])
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
 
-    // Boneco do jogador (modelo low-poly CC0 "Adventurer", Quaternius/Poly Pizza).
-    // Cores embutidas como cor por vértice (paleta assada). Veja data/adventurer.obj.
+    // Boneco do jogador (modelo low-poly "Adventurer").
+    // FONTE: "Adventurer" por Quaternius, licença CC0 (domínio público), via Poly Pizza:
+    //   https://poly.pizza/m/5EGWBMpuXq  -  https://quaternius.com/
+    //   Modelo original em GLB; convertido para OBJ com as cores da paleta assadas
+    //   como cor por vértice. Veja data/adventurer.obj e data/FONTES.txt.
     ObjModel adventurermodel("../../data/adventurer.obj");
     ComputeNormals(&adventurermodel);
     BuildTrianglesAndAddToVirtualScene(&adventurermodel);
@@ -432,6 +438,9 @@ int main(int argc, char* argv[])
 
     // Ginásio: modelo do PokéGym montado a partir dos STLs em data/gym/
     // (peças convertidas/montadas em um único OBJ com cores por vértice).
+    // FONTE: modelo do PokéGym (impressão 3D, CC) de
+    //   https://www.dorchester3d.com/pt/impressao/blogue/2016/08/pokemon-go-gym
+    //   As peças .stl foram montadas/convertidas para data/gym.obj.
     ObjModel gymmodel("../../data/gym.obj");
     ComputeNormals(&gymmodel);
     BuildTrianglesAndAddToVirtualScene(&gymmodel);
