@@ -65,3 +65,7 @@ ao volume do mapa (altura limitada às árvores de borda e XZ dentro das paredes
 Prompt: "Adicione comentários com a palavra FONTE no carregamento dos assets de
 terceiros (ginásio, modelo do jogador, textura externa)."
 → Comentários `FONTE` nos loads correspondentes. (`src/main.cpp`)
+
+**10. Sistema de colisão**
+Prompt: "Faça um sistema de colisão para quando mover o cubo, ele tenha colisão com outros objetos"
+Prompt: "Agora deixe esse codigo genérico para quando houver multiplos objetos no cenário"
