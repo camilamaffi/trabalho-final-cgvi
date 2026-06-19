@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 
 // Headers abaixo são específicos de C++
 #include <set>
@@ -117,7 +118,7 @@ void PopMatrix(glm::mat4& M);
 void BuildTrianglesAndAddToVirtualScene(ObjModel*); // Constrói representação de um ObjModel como malha de triângulos para renderização
 void ComputeNormals(ObjModel* model); // Computa normais de um ObjModel, caso não existam.
 void LoadShadersFromFiles(); // Carrega os shaders de vértice e fragmento, criando um programa de GPU
-void LoadTextureImage(const char* filename); // Função que carrega imagens de textura
+void LoadTextureImage(const char* filename, bool nearest = false, bool tiling = false); // Função que carrega imagens de textura
 void DrawVirtualObject(const char* object_name); // Desenha um objeto armazenado em g_VirtualScene
 GLuint LoadShader_Vertex(const char* filename);   // Carrega um vertex shader
 GLuint LoadShader_Fragment(const char* filename); // Carrega um fragment shader
@@ -252,6 +253,36 @@ enum class GameScene
 GameScene g_CurrentScene = GameScene::World;
 int g_CaptureTargetIndex = -1;
 
+// --- Mecânica de captura (mira -> arremesso -> resultado) ---
+enum class CaptureState { Aiming, Throwing, Caught };
+CaptureState g_CaptureState = CaptureState::Aiming;
+float g_CaptureCharge  = 0.0f;  // 0..1, carrega segurando L
+float g_CaptureThrowT  = 0.0f;  // 0..1, progresso do arremesso (Bézier)
+float g_CaptureChance  = 0.0f;  // chance definida no momento do arremesso
+float g_CaughtTimer    = 0.0f;  // tempo da animação de captura bem-sucedida
+glm::vec3 g_ThrowP0, g_ThrowP1, g_ThrowP2, g_ThrowP3; // pontos da Bézier do arremesso
+bool g_KeyL = false;            // tecla L (carregar a captura)
+
+// --- Armazenamento de Pokémons (interface 2D) ---
+// Cada Pokémon capturado guarda seus atributos (HP, XP e dois ataques).
+struct CapturedPokemon { int hp; int xp; int atk1; int atk2; };
+std::vector<CapturedPokemon> g_Captured;        // lista de capturados (máx. 100)
+
+const char* g_AttackNames[] = {
+    "Choque do Trovao", "Investida", "Cauda de Ferro", "Raio Solar",
+    "Ataque Rapido", "Bola Eletrica", "Trovao", "Agilidade"
+};
+const int g_NumAttacks = 8;
+
+int  g_CapturedCount    = 0;     // == g_Captured.size() (atalho)
+bool g_StorageOpen      = false; // janela de armazenamento aberta?
+int  g_StorageScrollRow = 0;     // linha do topo (rolagem)
+int  g_StorageDetail    = -1;    // índice do Pokémon em detalhe (-1 = grade)
+// Ícone de acesso, no canto inferior esquerdo (coordenadas NDC).
+const float UI_ICON_CX = -0.90f;
+const float UI_ICON_CY = -0.84f;
+const float UI_ICON_HH =  0.09f; // meia-altura do ícone em NDC
+
 // Variáveis que definem um programa de GPU (shaders). Veja função LoadShadersFromFiles().
 GLuint g_GpuProgramID = 0;
 GLint g_model_uniform;
@@ -321,6 +352,18 @@ glm::vec3 EvalCubicBezier(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3
          + (3.0f*u*t*t) * p2
          + (t*t*t) * p3;
 }
+
+// Desenha um quad de interface 2D centrado em (cx,cy) com meios-tamanhos (hw,hh)
+// em coordenadas NDC. Requer que view e projection estejam como identidade.
+void DrawUIQuad(float cx, float cy, float hw, float hh, int objid)
+{
+    glm::mat4 m = Matrix_Translate(cx, cy, 0.0f)
+                * Matrix_Rotate_X(3.141592f / 2.0f)
+                * Matrix_Scale(hw, 1.0f, hh);
+    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(m));
+    glUniform1i(g_object_id_uniform, objid);
+    DrawVirtualObject("the_plane");
+}
 int FindCollidingEntityIndex(float playerX, float playerZ, float playerHalfSize);
 
 int main(int argc, char* argv[])
@@ -333,6 +376,9 @@ int main(int argc, char* argv[])
         fprintf(stderr, "ERROR: glfwInit() failed.\n");
         std::exit(EXIT_FAILURE);
     }
+
+    // Semente para a aleatoriedade da chance de captura.
+    srand((unsigned int) time(NULL));
 
     // Definimos o callback para impressão de erros da GLFW no terminal
     glfwSetErrorCallback(ErrorCallback);
@@ -402,6 +448,16 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/forest.png");            // TextureImage2 - floresta que tila fora do mapa
     // rocket_r.png: gerada pela dupla com Python/PIL (fonte Arial Black) — sem fonte externa
     LoadTextureImage("../../data/rocket_r.png");          // TextureImage3 - "R" da Equipe Rocket no balão
+    // Texturas dos demais objetos (paleta do boneco via UV; resto via triplanar):
+    LoadTextureImage("../../data/adventurer_palette.png", true,  false); // TextureImage4 - paleta do jogador (NEAREST)
+    LoadTextureImage("../../data/tex_pikachu.png",        false, true);  // TextureImage5 - pikachu
+    LoadTextureImage("../../data/tex_stone.png",          false, true);  // TextureImage6 - pedra (ginásio)
+    LoadTextureImage("../../data/tex_metal.png",          false, true);  // TextureImage7 - metal (PokéStop)
+    LoadTextureImage("../../data/tex_dark.png",           false, true);  // TextureImage8 - tecido escuro (balão)
+    LoadTextureImage("../../data/tex_grass.png",          false, true);  // TextureImage9 - grama (borda do mapa)
+    LoadTextureImage("../../data/pokebola_tex.png");      // TextureImage10 - pokébola (via UV)
+    LoadTextureImage("../../data/icon_bag.png");          // TextureImage11 - ícone do armazenamento (UI)
+    LoadTextureImage("../../data/pikachu_icon.png");      // TextureImage12 - miniatura do pikachu (UI)
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel cubemodel("../../data/cube.obj");
@@ -445,6 +501,11 @@ int main(int argc, char* argv[])
     ComputeNormals(&gymmodel);
     BuildTrianglesAndAddToVirtualScene(&gymmodel);
 
+    // Pokébola (modelo feito pela dupla; esfera UV "Esfera_UV").
+    ObjModel pokebolamodel("../../data/pokebola.obj");
+    ComputeNormals(&pokebolamodel);
+    BuildTrianglesAndAddToVirtualScene(&pokebolamodel);
+
     if ( argc > 1 )
     {
         ObjModel model(argv[1]);
@@ -475,6 +536,11 @@ int main(int argc, char* argv[])
     #define ROCKET            11
     #define ROCKET_BASKET     12
     #define ROCKET_R          13
+    #define CAPTURE_BG        14
+    #define POKEBALL          15
+    #define UI_PANEL          16
+    #define UI_ICON           17
+    #define UI_THUMB          18
 
     // Configuração dos objetos da cena (feita uma única vez, fora do loop)
     {
@@ -647,6 +713,10 @@ int main(int argc, char* argv[])
                 {
                     g_CurrentScene = GameScene::Capture;
                     g_CaptureTargetIndex = collidingEntityIndex;
+                    // reinicia a mecânica de captura
+                    g_CaptureState  = CaptureState::Aiming;
+                    g_CaptureCharge = 0.0f;
+                    g_CaptureThrowT = 0.0f;
                 }
             }
         }
@@ -657,6 +727,90 @@ int main(int argc, char* argv[])
         {
             g_CurrentScene = GameScene::World;
             g_CaptureTargetIndex = -1;
+        }
+
+        // ---- Máquina de estados da captura (mira / arremesso / resultado) ----
+        if (g_CurrentScene == GameScene::Capture && g_CaptureTargetIndex >= 0)
+        {
+            const SceneEntity& tgt = g_Entities[g_CaptureTargetIndex];
+            glm::vec3 tc = glm::vec3(tgt.position.x, tgt.position.y + 0.25f, tgt.position.z);
+            // posição "na mão" (em frente à câmera de captura, mais embaixo)
+            glm::vec3 capCam = tc + glm::vec3(1.9f, 0.55f, 0.0f);
+            glm::vec3 toT = tc - capCam;
+            float tl = sqrtf(toT.x*toT.x + toT.y*toT.y + toT.z*toT.z);
+            glm::vec3 held = capCam + (toT / tl) * 0.45f + glm::vec3(0.0f, -0.18f, 0.0f);
+
+            if (g_CaptureState == CaptureState::Aiming)
+            {
+                if (g_KeyL)
+                {
+                    // segura L: carrega a barra (~1.2 s para encher)
+                    g_CaptureCharge += delta_t / 1.2f;
+                    if (g_CaptureCharge > 1.0f) g_CaptureCharge = 1.0f;
+                }
+                else if (g_CaptureCharge > 0.0f)
+                {
+                    // soltou L -> lança. Chance = max(25%, carga).
+                    g_CaptureChance = (g_CaptureCharge > 0.25f) ? g_CaptureCharge : 0.25f;
+                    g_ThrowP0 = held;
+                    g_ThrowP3 = tc;
+                    glm::vec3 d = g_ThrowP3 - g_ThrowP0;
+                    g_ThrowP1 = g_ThrowP0 + d * 0.33f + glm::vec3(0.0f, 0.5f, 0.0f);
+                    g_ThrowP2 = g_ThrowP0 + d * 0.66f + glm::vec3(0.0f, 0.5f, 0.0f);
+                    g_CaptureThrowT = 0.0f;
+                    g_CaptureState  = CaptureState::Throwing;
+                }
+            }
+            else if (g_CaptureState == CaptureState::Throwing)
+            {
+                g_CaptureThrowT += delta_t / 0.8f; // ~0.8 s para chegar
+                if (g_CaptureThrowT >= 1.0f)
+                {
+                    g_CaptureThrowT = 1.0f;
+                    float r = (float) rand() / (float) RAND_MAX;
+                    if (r < g_CaptureChance)
+                    {
+                        g_CaptureState = CaptureState::Caught; // capturou!
+                        g_CaughtTimer  = 0.0f;
+                    }
+                    else
+                    {
+                        g_CaptureState  = CaptureState::Aiming; // falhou: bola reaparece
+                        g_CaptureCharge = 0.0f;
+                    }
+                }
+            }
+            else // Caught
+            {
+                g_CaughtTimer += delta_t;
+                if (g_CaughtTimer > 1.2f)
+                {
+                    // Pokémon capturado: registra no armazenamento (limite 100)
+                    // com atributos aleatórios, remove do mapa e volta ao mundo.
+                    if (g_CapturedCount < 100)
+                    {
+                        CapturedPokemon p;
+                        p.hp   = rand() % 201; // 0..200
+                        p.xp   = rand() % 201; // 0..200
+                        p.atk1 = rand() % g_NumAttacks;
+                        p.atk2 = rand() % g_NumAttacks;
+                        if (p.atk2 == p.atk1) p.atk2 = (p.atk2 + 1) % g_NumAttacks; // dois ataques diferentes
+                        g_Captured.push_back(p);
+                        g_CapturedCount = (int) g_Captured.size();
+                    }
+                    g_Entities[g_CaptureTargetIndex].collidable = false;
+                    g_Entities[g_CaptureTargetIndex].position.y = -100.0f;
+                    g_CurrentScene       = GameScene::World;
+                    g_CaptureTargetIndex = -1;
+
+                    // Vai direto para a página (detalhe) do Pokémon recém-capturado.
+                    if (g_CapturedCount > 0)
+                    {
+                        g_StorageOpen   = true;
+                        g_StorageDetail = g_CapturedCount - 1;
+                    }
+                }
+            }
         }
 
         // Limite de segurança (árvores bloqueiam em ~±4.4, isso é só backstop)
@@ -677,7 +831,7 @@ int main(int argc, char* argv[])
         {
             const SceneEntity& target = g_Entities[g_CaptureTargetIndex];
             glm::vec3 targetCenter = glm::vec3(target.position.x, target.position.y + 0.25f, target.position.z);
-            glm::vec3 captureCameraPosition = targetCenter + glm::vec3(0.9f, 0.35f, 0.0f);
+            glm::vec3 captureCameraPosition = targetCenter + glm::vec3(1.9f, 0.55f, 0.0f);
 
             camera_position_c = glm::vec4(captureCameraPosition, 1.0f);
             camera_lookat_l   = glm::vec4(targetCenter, 1.0f);
@@ -787,11 +941,30 @@ int main(int argc, char* argv[])
             glm::vec3 targetCenter = glm::vec3(target.position.x, target.position.y + 0.25f, target.position.z);
             glm::vec3 captureDirection = camera_position_c - glm::vec4(targetCenter, 1.0f);
             captureFacingAngle = atan2(captureDirection.x, captureDirection.z);
+
+            // Fundo da cena de captura: um grande painel com a textura de floresta,
+            // posicionado atrás do Pokémon e encarando a câmera (billboard).
+            glm::vec3 toCam = glm::vec3(camera_position_c) - targetCenter;
+            float lenc = sqrtf(toCam.x*toCam.x + toCam.y*toCam.y + toCam.z*toCam.z);
+            glm::vec3 dirc = toCam / lenc;
+            glm::vec3 bg = targetCenter - dirc * 3.0f;           // 3 unidades atrás do alvo
+            float angBg = atan2(toCam.x, toCam.z);               // encara a câmera (yaw)
+            model = Matrix_Translate(bg.x, bg.y, bg.z)
+                  * Matrix_Rotate_Y(angBg)
+                  * Matrix_Rotate_X(3.141592f / 2.0f)            // painel em pé
+                  * Matrix_Scale(6.0f, 1.0f, 4.5f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, CAPTURE_BG);
+            DrawVirtualObject("the_plane");
         }
 
         for (size_t i = 0; i < g_Entities.size(); ++i)
         {
             const SceneEntity& obj = g_Entities[i];
+
+            // Na cena de captura, mostramos apenas o Pokémon alvo (esconde o resto).
+            if (g_CurrentScene == GameScene::Capture && g_CaptureTargetIndex != static_cast<int>(i))
+                continue;
             // Fator de visibilidade por aproximação (estilo Pokémon GO).
             // appearRadius == 0  -> sempre visível.
             // appearRadius  > 0  -> surge/some suavemente conforme a distância.
@@ -811,6 +984,14 @@ int main(int argc, char* argv[])
                     continue;
             }
 
+            // Captura bem-sucedida: o Pokémon alvo "encolhe" para dentro da bola.
+            if (g_CurrentScene == GameScene::Capture
+                && g_CaptureState == CaptureState::Caught
+                && g_CaptureTargetIndex == static_cast<int>(i))
+            {
+                appearScale *= std::max(0.0f, 1.0f - g_CaughtTimer / 0.8f);
+            }
+
             model =
                 Matrix_Translate(
                     obj.position.x,
@@ -821,7 +1002,7 @@ int main(int argc, char* argv[])
                     (g_CurrentScene == GameScene::Capture
                      && g_CaptureTargetIndex == static_cast<int>(i)
                      && obj.object_id == PIKACHU)
-                    ? Matrix_Rotate_Y(captureFacingAngle)
+                    ? Matrix_Rotate_Y(captureFacingAngle - 1.5707963f) // -90°: o modelo do pikachu encara a câmera (front em outro eixo)
                     : Matrix_Identity()
                 )
                 *
@@ -849,6 +1030,7 @@ int main(int argc, char* argv[])
         }
 
         // Painéis verticais de floresta nos 4 lados — dão sensação de 3D
+        if (g_CurrentScene != GameScene::Capture)
         {
             const float WD  = 5.5f;  // distância da borda do mapa
             const float WHW = 8.0f;  // meia-largura do painel
@@ -887,6 +1069,7 @@ int main(int argc, char* argv[])
         }
 
         // ---- PokéStops: cooldown, coleta por proximidade e desenho ----------
+        if (g_CurrentScene != GameScene::Capture)
         {
             float now = (float)glfwGetTime();
             const float COLLECT_RADIUS         = 0.8f;  // distância para coletar
@@ -971,6 +1154,7 @@ int main(int argc, char* argv[])
         }
 
         // ---- Ginásios: modelo do PokéGym (sem Pokémon por enquanto) ---------
+        if (g_CurrentScene != GameScene::Capture)
         {
             const float GYM_SIZE = 1.4f; // altura do modelo (normalizado p/ 1.0)
             for (const glm::vec3& gym : g_Gyms)
@@ -983,7 +1167,33 @@ int main(int argc, char* argv[])
             }
         }
 
+        // ---- Pokébola: aparece SÓ na captura (mira / arremesso / captura) ----
+        if (g_CurrentScene == GameScene::Capture && g_CaptureTargetIndex >= 0)
+        {
+            const SceneEntity& tgt = g_Entities[g_CaptureTargetIndex];
+            glm::vec3 tc = glm::vec3(tgt.position.x, tgt.position.y + 0.25f, tgt.position.z);
+            glm::vec3 capCam = tc + glm::vec3(1.9f, 0.55f, 0.0f);
+            glm::vec3 toT = tc - capCam;
+            float tl = sqrtf(toT.x*toT.x + toT.y*toT.y + toT.z*toT.z);
+            glm::vec3 held = capCam + (toT / tl) * 0.45f + glm::vec3(0.0f, -0.18f, 0.0f);
+
+            glm::vec3 ballPos = held; // mira: bola "na mão"
+            if (g_CaptureState == CaptureState::Throwing)
+                ballPos = EvalCubicBezier(g_ThrowP0, g_ThrowP1, g_ThrowP2, g_ThrowP3, g_CaptureThrowT);
+            else if (g_CaptureState == CaptureState::Caught)
+                ballPos = tc; // bola fica no Pokémon enquanto ele "entra" nela
+
+            float spin = (float) glfwGetTime() * 5.0f;
+            model = Matrix_Translate(ballPos.x, ballPos.y, ballPos.z)
+                  * Matrix_Rotate_Y(spin)
+                  * Matrix_Scale(0.03f, 0.03f, 0.03f); // bem menor que o Pokémon
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, POKEBALL);
+            DrawVirtualObject("Esfera_UV");
+        }
+
         // ---- Balão da Equipe Rocket: voa pelo céu por curva de Bézier cúbica --
+        if (g_CurrentScene != GameScene::Capture)
         {
             // Loop fechado formado por 4 segmentos de Bézier cúbica que, juntos,
             // aproximam um círculo no plano XZ a uma certa altitude (Y).
@@ -1084,6 +1294,28 @@ int main(int argc, char* argv[])
         if (g_CurrentScene == GameScene::Capture)
         {
             TextRendering_PrintString(window, "[ Sair ]", 0.58f, 0.90f, 1.0f);
+
+            // Barra de progresso da captura (estilo Pokémon GO).
+            if (g_CaptureState == CaptureState::Aiming)
+            {
+                int filled = (int)(g_CaptureCharge * 20.0f);
+                if (filled > 20) filled = 20;
+                std::string bar = "[" + std::string(filled, '#') + std::string(20 - filled, '-') + "]";
+                float chance = (g_CaptureCharge > 0.25f ? g_CaptureCharge : 0.25f) * 100.0f;
+
+                char buf[160];
+                snprintf(buf, sizeof(buf), "Captura: %s  %d%%", bar.c_str(), (int)chance);
+                TextRendering_PrintString(window, buf, -0.45f, -0.80f, 1.2f);
+                TextRendering_PrintString(window, "Segure L para carregar, solte para lancar", -0.45f, -0.88f, 1.0f);
+            }
+            else if (g_CaptureState == CaptureState::Throwing)
+            {
+                TextRendering_PrintString(window, "Lancando...", -0.1f, -0.85f, 1.2f);
+            }
+            else // Caught
+            {
+                TextRendering_PrintString(window, "Pokemon capturado!", -0.25f, -0.85f, 1.4f);
+            }
         }
 
         // Imprimimos na tela os ângulos de Euler que controlam a rotação do
@@ -1112,6 +1344,136 @@ int main(int argc, char* argv[])
 
             if (g_MessageTimer > 0.0f)
                 TextRendering_PrintString(window, g_Message, -0.45f, 0.80f, 1.5f);
+        }
+
+        // ===== Interface 2D: ícone de armazenamento + janela =====
+        // Desenhamos quads diretamente em NDC (view e projection = identidade),
+        // por cima da cena (sem teste de profundidade nem culling).
+        // Não aparece durante a cena de captura.
+        if (g_CurrentScene != GameScene::Capture)
+        {
+            glUseProgram(g_GpuProgramID);
+            glm::mat4 ui_identity = Matrix_Identity();
+            glUniformMatrix4fv(g_view_uniform,       1, GL_FALSE, glm::value_ptr(ui_identity));
+            glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(ui_identity));
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_CULL_FACE);
+
+            float aspect = g_ScreenRatio;
+
+            if (g_StorageOpen && g_StorageDetail < 0)
+            {
+                // --- GRADE de miniaturas ---
+                DrawUIQuad(0.0f, 0.0f, 0.58f, 0.66f, UI_PANEL);
+
+                const int COLS = 4, VIS_ROWS = 3;
+                const float ths = 0.13f;          // meia-altura da miniatura (NDC)
+                const float thw = ths / aspect;   // meia-largura (mantém quadrada)
+                const float xcols[4] = { -0.42f, -0.14f, 0.14f, 0.42f };
+                int start = g_StorageScrollRow * COLS;
+                int end   = start + VIS_ROWS * COLS;
+                for (int i = start; i < end && i < g_CapturedCount; ++i)
+                {
+                    int   rel = (i / COLS) - g_StorageScrollRow;
+                    float x   = xcols[i % COLS];
+                    float y   = 0.34f - rel * 0.32f;
+                    DrawUIQuad(x, y, thw, ths, UI_THUMB);
+                }
+            }
+            else if (g_StorageOpen && g_StorageDetail >= 0)
+            {
+                // --- DETALHE: painel + Pokémon 3D girando ---
+                DrawUIQuad(0.0f, 0.0f, 0.78f, 0.92f, UI_PANEL);
+
+                // Limpamos o depth e renderizamos o Pokémon em 3D por cima do painel,
+                // com uma câmera própria. Ele gira no mesmo tamanho do mapa (escala 0.1).
+                glClear(GL_DEPTH_BUFFER_BIT);
+                glEnable(GL_DEPTH_TEST);
+                glEnable(GL_CULL_FACE);
+
+                glm::vec4 dcam  = glm::vec4(0.0f, 0.05f, 0.45f, 1.0f);
+                glm::vec4 dlook = glm::vec4(0.0f, 0.02f, 0.0f, 1.0f);
+                glm::mat4 dView = Matrix_Camera_View(dcam, dlook - dcam, glm::vec4(0.0f,1.0f,0.0f,0.0f));
+                glm::mat4 dProj = Matrix_Perspective(3.141592f/3.0f, aspect, -0.1f, -10.0f);
+                glUniformMatrix4fv(g_view_uniform,       1, GL_FALSE, glm::value_ptr(dView));
+                glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(dProj));
+
+                float spin = (float) glfwGetTime() * 1.5f;
+                model = Matrix_Rotate_Y(spin)
+                      * Matrix_Scale(0.1f, 0.1f, 0.1f)
+                      * Matrix_Translate(-0.82f, 0.0f, -0.06f); // mesmo offset do mapa (centraliza)
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, PIKACHU);
+                DrawVirtualObject("Cube");
+
+                // Volta para o desenho 2D (identidade) para o ícone e os textos.
+                glDisable(GL_DEPTH_TEST);
+                glDisable(GL_CULL_FACE);
+                glUniformMatrix4fv(g_view_uniform,       1, GL_FALSE, glm::value_ptr(ui_identity));
+                glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(ui_identity));
+            }
+
+            // Ícone (sempre visível) no canto inferior esquerdo
+            DrawUIQuad(UI_ICON_CX, UI_ICON_CY, UI_ICON_HH / aspect, UI_ICON_HH, UI_ICON);
+
+            glEnable(GL_DEPTH_TEST);
+            glEnable(GL_CULL_FACE);
+
+            // Textos da janela (por cima dos quads)
+            if (g_StorageOpen && g_StorageDetail >= 0)
+            {
+                // --- Textos da tela de DETALHE ---
+                const CapturedPokemon& p = g_Captured[g_StorageDetail];
+                char buf[64];
+
+                snprintf(buf, sizeof(buf), "Pikachu %d", g_StorageDetail + 1);
+                TextRendering_PrintString(window, buf, -0.14f, 0.80f, 1.6f);
+
+                snprintf(buf, sizeof(buf), "HP: %d / 200", p.hp);
+                TextRendering_PrintString(window, buf, -0.62f, -0.42f, 1.3f);
+                snprintf(buf, sizeof(buf), "XP: %d / 200", p.xp);
+                TextRendering_PrintString(window, buf, -0.62f, -0.52f, 1.3f);
+
+                TextRendering_PrintString(window, "Ataques:", -0.62f, -0.66f, 1.2f);
+                snprintf(buf, sizeof(buf), "- %s", g_AttackNames[p.atk1]);
+                TextRendering_PrintString(window, buf, -0.58f, -0.74f, 1.1f);
+                snprintf(buf, sizeof(buf), "- %s", g_AttackNames[p.atk2]);
+                TextRendering_PrintString(window, buf, -0.58f, -0.82f, 1.1f);
+
+                TextRendering_PrintString(window, "(clique para voltar)", 0.34f, -0.92f, 0.8f);
+            }
+            else if (g_StorageOpen)
+            {
+                // --- Textos da GRADE ---
+                char titulo[48];
+                snprintf(titulo, sizeof(titulo), "Meus Pokemons (%d/100)", g_CapturedCount);
+                TextRendering_PrintString(window, titulo, -0.26f, 0.58f, 1.4f);
+
+                if (g_CapturedCount == 0)
+                {
+                    TextRendering_PrintString(window, "Vazio - capture pokemons!", -0.28f, 0.0f, 1.1f);
+                }
+                else
+                {
+                    // Rótulo "Pikachu N" centralizado embaixo de cada miniatura
+                    const int COLS = 4, VIS_ROWS = 3;
+                    const float ths = 0.13f;
+                    const float xcols[4] = { -0.42f, -0.14f, 0.14f, 0.42f };
+                    const float labelScale = 0.6f;
+                    float cw = TextRendering_CharWidth(window) * labelScale;
+                    int start = g_StorageScrollRow * COLS;
+                    int end   = start + VIS_ROWS * COLS;
+                    for (int i = start; i < end && i < g_CapturedCount; ++i)
+                    {
+                        int   rel = (i / COLS) - g_StorageScrollRow;
+                        float x   = xcols[i % COLS];
+                        float y   = 0.34f - rel * 0.32f;
+                        std::string lbl = "Pikachu " + std::to_string(i + 1);
+                        float tw = lbl.size() * cw;
+                        TextRendering_PrintString(window, lbl, x - tw * 0.5f, y - ths - 0.05f, labelScale);
+                    }
+                }
+            }
         }
 
         // O framebuffer onde OpenGL executa as operações de renderização não
@@ -1179,7 +1541,7 @@ bool CheckCollision(float playerX, float playerZ, float playerHalfSize)
 }
 
 // Função que carrega uma imagem para ser utilizada como textura
-void LoadTextureImage(const char* filename)
+void LoadTextureImage(const char* filename, bool nearest, bool tiling)
 {
     printf("Carregando imagem \"%s\"... ", filename);
 
@@ -1205,12 +1567,15 @@ void LoadTextureImage(const char* filename)
     glGenSamplers(1, &sampler_id);
 
     // Veja slides 95-96 do documento Aula_20_Mapeamento_de_Texturas.pdf
-    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // tiling=true -> GL_REPEAT (texturas que se repetem, usadas no triplanar).
+    GLenum wrap = tiling ? GL_REPEAT : GL_CLAMP_TO_EDGE;
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_S, wrap);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_WRAP_T, wrap);
 
-    // Parâmetros de amostragem da textura.
-    glSamplerParameteri(sampler_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glSamplerParameteri(sampler_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // Parâmetros de amostragem. nearest=true (sem mipmap) evita "borrar" cores em
+    // texturas tipo paleta (ex.: a paleta do boneco).
+    glSamplerParameteri(sampler_id, GL_TEXTURE_MIN_FILTER, nearest ? GL_NEAREST : GL_LINEAR_MIPMAP_LINEAR);
+    glSamplerParameteri(sampler_id, GL_TEXTURE_MAG_FILTER, nearest ? GL_NEAREST : GL_LINEAR);
 
     // Agora enviamos a imagem lida do disco para a GPU
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -1312,6 +1677,15 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage1"), 1);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage2"), 2);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage3"), 3);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage4"), 4);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage5"), 5);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage6"), 6);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage7"), 7);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage8"), 8);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage9"), 9);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage10"), 10);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage11"), 11);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage12"), 12);
     glUseProgram(0);
 }
 
@@ -1809,6 +2183,53 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
     {
+        // Clique no ícone de armazenamento (canto inferior esquerdo) -> abre/fecha
+        // a janela. Quando a janela está aberta, os cliques não afetam o mundo.
+        // (Desabilitado durante a cena de captura.)
+        if (g_CurrentScene != GameScene::Capture)
+        {
+            double mx, my; glfwGetCursorPos(window, &mx, &my);
+            int ww, wh; glfwGetWindowSize(window, &ww, &wh);
+            float ndcX = (float)(2.0 * mx / ww - 1.0);
+            float ndcY = (float)(1.0 - 2.0 * my / wh);
+            float ihw  = UI_ICON_HH / g_ScreenRatio;
+            if (fabs(ndcX - UI_ICON_CX) < ihw && fabs(ndcY - UI_ICON_CY) < UI_ICON_HH)
+            {
+                g_StorageOpen   = !g_StorageOpen;
+                g_StorageDetail = -1;
+                return;
+            }
+            if (g_StorageOpen)
+            {
+                if (g_StorageDetail >= 0)
+                {
+                    g_StorageDetail = -1; // em detalhe: qualquer clique volta à grade
+                }
+                else
+                {
+                    // grade: clique numa miniatura abre o detalhe daquele Pokémon
+                    const int COLS = 4, VIS_ROWS = 3;
+                    const float ths = 0.13f;
+                    const float thw = ths / g_ScreenRatio;
+                    const float xcols[4] = { -0.42f, -0.14f, 0.14f, 0.42f };
+                    int start = g_StorageScrollRow * COLS;
+                    int end   = start + VIS_ROWS * COLS;
+                    for (int i = start; i < end && i < g_CapturedCount; ++i)
+                    {
+                        int   rel = (i / COLS) - g_StorageScrollRow;
+                        float x   = xcols[i % COLS];
+                        float y   = 0.34f - rel * 0.32f;
+                        if (fabs(ndcX - x) < thw && fabs(ndcY - y) < ths)
+                        {
+                            g_StorageDetail = i;
+                            break;
+                        }
+                    }
+                }
+                return; // janela aberta: cliques não afetam o mundo
+            }
+        }
+
         // Se o usuário pressionou o botão esquerdo do mouse, guardamos a
         // posição atual do cursor nas variáveis g_LastCursorPosX e
         // g_LastCursorPosY.  Também, setamos a variável
@@ -1974,6 +2395,19 @@ void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
 // Função callback chamada sempre que o usuário movimenta a "rodinha" do mouse.
 void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
+    // Se a janela de armazenamento está aberta, a rodinha rola a lista.
+    if (g_StorageOpen)
+    {
+        g_StorageScrollRow -= (int) yoffset;
+        const int COLS = 4, VIS_ROWS = 3;
+        int totalRows = (g_CapturedCount + COLS - 1) / COLS;
+        int maxScroll = totalRows - VIS_ROWS;
+        if (maxScroll < 0) maxScroll = 0;
+        if (g_StorageScrollRow < 0) g_StorageScrollRow = 0;
+        if (g_StorageScrollRow > maxScroll) g_StorageScrollRow = maxScroll;
+        return;
+    }
+
     // Atualizamos a distância da câmera para a origem utilizando a
     // movimentação da "rodinha", simulando um ZOOM.
     g_CameraDistance -= 0.1f*yoffset;
@@ -2105,6 +2539,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         g_KeyQ = (action != GLFW_RELEASE);
     if (key == GLFW_KEY_E)
         g_KeyE = (action != GLFW_RELEASE);
+
+    // L: carrega a captura (segurar) na cena de captura
+    if (key == GLFW_KEY_L)
+        g_KeyL = (action != GLFW_RELEASE);
 }
 
 // Definimos o callback para impressão de erros da GLFW no terminal

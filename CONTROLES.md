@@ -31,6 +31,12 @@ de borda e não passa dos contornos do mapa (paredes de floresta).
 
 A HUD mostra o modo atual no canto superior esquerdo.
 
+## Armazenamento de Pokémons
+
+- **Ícone no canto superior esquerdo**: clique para abrir/fechar a janela de
+  armazenamento. Começa vazia; cada Pokémon capturado vira uma **miniatura** lá.
+- Com a janela aberta, use a **rodinha do mouse** para rolar (se houver muitos).
+
 ## Interações no mapa
 
 - **PokéStops** (poste azul com disco/anel girando): chegue perto para coletar
@@ -44,9 +50,16 @@ A HUD mostra o modo atual no canto superior esquerdo.
 
 ## Cena de captura
 
+Mostra só o Pokémon com um fundo de floresta.
+
 | Tecla | Ação |
 |---|---|
+| `L` (segurar) | Carrega a barra de captura — quanto mais cheia, maior a chance (mín. 25%, metade 50%, cheia 100%) |
+| `L` (soltar) | Lança a Pokébola numa trajetória curva até o Pokémon |
 | `ESC` ou `ENTER` | Sair da cena de captura e voltar ao mapa |
+
+Se a captura falhar, a Pokébola reaparece para tentar de novo. Se acertar, o
+Pokémon entra na Pokébola e é capturado.
 
 ## Outros
 

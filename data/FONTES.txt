@@ -4,8 +4,11 @@ https://polyhaven.com/a/red_brick
 Boneco do jogador (adventurer.obj) - "Adventurer" por Quaternius, licenca CC0 (dominio publico)
 https://poly.pizza/m/5EGWBMpuXq
 https://quaternius.com/
-Observacao: modelo original em GLB; convertido para OBJ e com as cores da paleta
-assadas como cor-por-vertice (linhas "v x y z r g b").
+Observacao: modelo original em GLB; convertido para OBJ mantendo as UVs; a textura
+da paleta original foi salva em data/adventurer_palette.png e mapeada por UV.
+
+Texturas tex_pikachu.png, tex_stone.png, tex_metal.png, tex_dark.png e rocket_r.png:
+geradas pela propria dupla (Python/PIL) - sem fonte externa.
 
 Ginasio (gym.obj) - modelo do PokeGym (impressao 3D), partes STL em data/gym/gym/
 montadas e convertidas para um unico OBJ com cores por vertice.

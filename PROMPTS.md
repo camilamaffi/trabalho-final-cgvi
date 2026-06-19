@@ -69,3 +69,27 @@ terceiros (ginásio, modelo do jogador, textura externa)."
 **10. Sistema de colisão**
 Prompt: "Faça um sistema de colisão para quando mover o cubo, ele tenha colisão com outros objetos"
 Prompt: "Agora deixe esse codigo genérico para quando houver multiplos objetos no cenário"
+
+**11. Mapeamento de texturas em todos os objetos**
+Prompt: "Faça TODOS os objetos terem a cor definida por textura (≥3 imagens
+distintas). Use UV onde o modelo tem coordenadas (re-exporte o modelo do jogador
+com UVs usando sua textura-paleta; pikachu pela UV) e mapeamento triplanar em
+espaço de mundo onde não há UV (ginásio, PokéStop, balão, chão de grama).
+Acrescente opções de filtro (NEAREST) e wrap (REPEAT) no carregamento de textura."
+→ Função `triplanar` no shader; re-export do `adventurer.obj` com UVs +
+`adventurer_palette.png`; texturas procedurais (PIL) para os demais; 10 unidades
+de textura. (`src/main.cpp`, `src/shader_fragment.glsl`, `data/*.png`)
+
+**12. Cena e mecânica de captura**
+Prompt: "Quando o jogador se aproxima, o Pokémon aparece; ao encostar nele (teste
+de colisão) entra no modo captura. Na captura, renderize apenas o Pokémon com um
+plano de fundo (billboard) usando a textura de floresta. Adicione a Pokébola
+(somente na captura, bem menor que o Pokémon): segure `L` para carregar uma barra
+de progresso cuja chance é max(25%, carga) (vazia 25%, metade 50%, cheia 100%); ao
+soltar, lance a Pokébola seguindo uma curva de Bézier cúbica até o Pokémon. Sorteie
+o resultado: se capturar, o Pokémon entra na Pokébola; se falhar, a Pokébola
+reaparece para nova tentativa."
+→ Máquina de estados `CaptureState { Aiming, Throwing, Caught }`; gating do mundo
+na captura + fundo `CAPTURE_BG`; Pokébola (`pokebola.obj`) por UV; arremesso com
+`EvalCubicBezier`; barra na HUD; `srand`/`rand`. (`src/main.cpp`,
+`src/shader_fragment.glsl`, `data/pokebola_tex.png`)

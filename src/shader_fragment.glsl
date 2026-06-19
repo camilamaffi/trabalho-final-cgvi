@@ -35,6 +35,11 @@ uniform mat4 projection;
 #define ROCKET            11
 #define ROCKET_BASKET     12
 #define ROCKET_R          13
+#define CAPTURE_BG        14
+#define POKEBALL          15
+#define UI_PANEL          16
+#define UI_ICON           17
+#define UI_THUMB          18
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -46,6 +51,15 @@ uniform sampler2D TextureImage0;
 uniform sampler2D TextureImage1;
 uniform sampler2D TextureImage2;
 uniform sampler2D TextureImage3;
+uniform sampler2D TextureImage4; // paleta do jogador (via UV)
+uniform sampler2D TextureImage5; // pikachu (via UV)
+uniform sampler2D TextureImage6; // pedra (ginásio / PokéStop em cooldown)
+uniform sampler2D TextureImage7; // metal (PokéStop)
+uniform sampler2D TextureImage8; // tecido escuro (balão)
+uniform sampler2D TextureImage9; // grama (borda do mapa)
+uniform sampler2D TextureImage10; // pokébola (via UV)
+uniform sampler2D TextureImage11; // ícone do armazenamento (UI)
+uniform sampler2D TextureImage12; // miniatura do pikachu (UI)
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -53,6 +67,19 @@ out vec4 color;
 // Constantes
 #define M_PI   3.14159265358979323846
 #define M_PI_2 1.57079632679489661923
+
+// Mapeamento triplanar: amostra a textura por 3 projeções planares (XY, YZ, XZ)
+// e mistura conforme a normal. Usado em objetos sem coordenadas de textura (UV),
+// evitando que a imagem fique "esticada".
+vec3 triplanar(sampler2D tex, vec3 p, vec3 nrm, float scale)
+{
+    vec3 b = abs(normalize(nrm));
+    b /= (b.x + b.y + b.z);
+    vec3 cx = texture(tex, p.yz * scale).rgb;
+    vec3 cy = texture(tex, p.xz * scale).rgb;
+    vec3 cz = texture(tex, p.xy * scale).rgb;
+    return cx*b.x + cy*b.y + cz*b.z;
+}
 
 void main()
 {
@@ -91,12 +118,13 @@ void main()
     }
     else if ( object_id == PLAYER )
     {
-        // Boneco do jogador: cor vem direto dos vértices (paleta assada do modelo)
-        Kd0 = vertex_color;
+        // Boneco do jogador: textura-paleta do modelo, mapeada pelas UVs
+        Kd0 = texture(TextureImage4, texcoords).rgb;
     }
     else if ( object_id == PIKACHU )
     {
-        Kd0 = vec3(1.0, 0.8, 0.0);
+        // Pikachu: textura amarela, mapeada pelas UVs do modelo
+        Kd0 = texture(TextureImage5, texcoords).rgb;
     }
     else if ( object_id == PLANE )
     {
@@ -111,8 +139,8 @@ void main()
         }
         else
         {
-            // Região externa: grama verde simples
-            Kd0 = vec3(0.22, 0.52, 0.18);
+            // Região externa: textura de grama (mapeamento planar por X,Z do mundo)
+            Kd0 = texture(TextureImage9, position_world.xz * 0.5).rgb;
         }
     }
     else if ( object_id == TREE )
@@ -121,28 +149,33 @@ void main()
     }
     else if ( object_id == POKESTOP )
     {
-        // PokéStop disponível: azul/ciano vibrante
-        Kd0 = vec3(0.2, 0.6, 0.95);
+        // PokéStop disponível: textura metálica azulada (triplanar)
+        Kd0 = triplanar(TextureImage7, position_world.xyz, n.xyz, 2.5);
     }
     else if ( object_id == POKESTOP_COOLDOWN )
     {
-        // PokéStop em cooldown: cinza apagado
-        Kd0 = vec3(0.4, 0.42, 0.45);
+        // PokéStop em cooldown: textura de pedra cinza (triplanar)
+        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 2.5);
     }
     else if ( object_id == GYM )
     {
-        // Ginásio: cores assadas por parte no modelo (cor por vértice)
-        Kd0 = vertex_color;
+        // Ginásio: textura de pedra (triplanar)
+        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 1.2);
     }
     else if ( object_id == ROCKET )
     {
-        // Balão da Equipe Rocket: preto
-        Kd0 = vec3(0.06, 0.06, 0.07);
+        // Balão da Equipe Rocket: textura escura (triplanar)
+        Kd0 = triplanar(TextureImage8, position_world.xyz, n.xyz, 1.5);
     }
     else if ( object_id == ROCKET_BASKET )
     {
-        // Cesto do balão: marrom escuro
-        Kd0 = vec3(0.25, 0.17, 0.10);
+        // Cesto/cordas do balão: textura escura (triplanar)
+        Kd0 = triplanar(TextureImage8, position_world.xyz, n.xyz, 4.0);
+    }
+    else if ( object_id == POKEBALL )
+    {
+        // Pokébola: textura (vermelho/preto/branco) mapeada pelas UVs do modelo
+        Kd0 = texture(TextureImage10, texcoords).rgb;
     }
     else if ( object_id == ROCKET_R )
     {
@@ -160,6 +193,32 @@ void main()
         V = texcoords.y;
         Kd0 = texture(TextureImage2, vec2(U, V)).rgb;
     }
+    else if ( object_id == CAPTURE_BG )
+    {
+        // Fundo da cena de captura: textura de floresta.
+        Kd0 = texture(TextureImage2, texcoords).rgb;
+    }
+    else if ( object_id == UI_PANEL )
+    {
+        // Painel da janela de armazenamento (escuro)
+        Kd0 = vec3(0.11, 0.12, 0.20);
+    }
+    else if ( object_id == UI_ICON )
+    {
+        Kd0 = texture(TextureImage11, texcoords).rgb;
+    }
+    else if ( object_id == UI_THUMB )
+    {
+        Kd0 = texture(TextureImage12, texcoords).rgb;
+    }
+
+    // Objetos "chapados" (sem iluminação): fundo de captura e interface 2D.
+    if ( object_id == CAPTURE_BG || object_id == UI_PANEL
+         || object_id == UI_ICON || object_id == UI_THUMB )
+    {
+        color = vec4(pow(Kd0, vec3(1.0/2.2)), 1.0);
+        return;
+    }
 
     // ===== Modelo de iluminação de Blinn-Phong =====
     // (ambiente + difusa + especular), aplicado a todos os objetos.
@@ -174,9 +233,9 @@ void main()
         Ks = vec3(0.0);
         q  = 1.0;
     }
-    else if ( object_id == PIKACHU || object_id == POKESTOP || object_id == GYM_TOP )
+    else if ( object_id == PIKACHU || object_id == POKESTOP || object_id == GYM_TOP || object_id == POKEBALL )
     {
-        // Pikachu e partes douradas/disco do PokéStop: mais "polidos"
+        // Pikachu, disco do PokéStop, dourado do gym e pokébola: mais "polidos"
         Ks = vec3(0.5);
         q  = 64.0;
     }
