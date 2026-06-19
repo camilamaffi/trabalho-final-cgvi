@@ -40,6 +40,16 @@ uniform mat4 projection;
 #define UI_PANEL          16
 #define UI_ICON           17
 #define UI_THUMB          18
+#define CHARMANDER        19
+#define UI_THUMB_2        20
+#define UI_BORDER         21
+#define UI_TEAM_RED       22
+#define UI_TEAM_BLUE      23
+#define UI_TEAM_YELLOW    24
+#define GYM_RED           25
+#define GYM_BLUE          26
+#define GYM_YELLOW        27
+#define GYM_MODEL         28
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -60,6 +70,9 @@ uniform sampler2D TextureImage9; // grama (borda do mapa)
 uniform sampler2D TextureImage10; // pokébola (via UV)
 uniform sampler2D TextureImage11; // ícone do armazenamento (UI)
 uniform sampler2D TextureImage12; // miniatura do pikachu (UI)
+uniform sampler2D TextureImage13; // charmander (via UV)
+uniform sampler2D TextureImage14; // miniatura do charmander (UI)
+uniform sampler2D TextureImage15; // fundo da cena de captura (mapa-captura.png)
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -126,6 +139,11 @@ void main()
         // Pikachu: textura amarela, mapeada pelas UVs do modelo
         Kd0 = texture(TextureImage5, texcoords).rgb;
     }
+    else if ( object_id == CHARMANDER )
+    {
+        // Charmander: textura laranja, mapeada pelas UVs do modelo
+        Kd0 = texture(TextureImage13, texcoords).rgb;
+    }
     else if ( object_id == PLANE )
     {
         float cityHalf = 5.0;
@@ -149,18 +167,40 @@ void main()
     }
     else if ( object_id == POKESTOP )
     {
-        // PokéStop disponível: textura metálica azulada (triplanar)
-        Kd0 = triplanar(TextureImage7, position_world.xyz, n.xyz, 2.5);
+        // PokéStop disponível: azul sólido (a cor é independente da forma).
+        Kd0 = vec3(0.14, 0.55, 0.95);
     }
     else if ( object_id == POKESTOP_COOLDOWN )
     {
-        // PokéStop em cooldown: textura de pedra cinza (triplanar)
-        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 2.5);
+        // PokéStop em cooldown: cinza sólido.
+        Kd0 = vec3(0.55, 0.55, 0.55);
     }
     else if ( object_id == GYM )
     {
-        // Ginásio: textura de pedra (triplanar)
+        // Ginásio livre: textura de pedra (triplanar), tom cinza
         Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 1.2);
+    }
+    else if ( object_id == GYM_RED )
+    {
+        // Ginásio do time Vermelho: pedra tingida de vermelho. O canal R passa de
+        // 1.0 para compensar a pedra escura e deixar o vermelho mais vivo/claro.
+        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 1.2) * vec3(1.60, 0.50, 0.48);
+    }
+    else if ( object_id == GYM_BLUE )
+    {
+        // Ginásio do time Azul: pedra tingida de azul
+        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 1.2) * vec3(0.35, 0.50, 0.98);
+    }
+    else if ( object_id == GYM_YELLOW )
+    {
+        // Ginásio do time Amarelo: pedra tingida de amarelo
+        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 1.2) * vec3(1.00, 0.85, 0.30);
+    }
+    else if ( object_id == GYM_MODEL )
+    {
+        // Modelo de ginásio do Pokémon GO: cor por vértice (a cor da torre já
+        // codifica o time; cinza = livre).
+        Kd0 = vertex_color;
     }
     else if ( object_id == ROCKET )
     {
@@ -195,13 +235,30 @@ void main()
     }
     else if ( object_id == CAPTURE_BG )
     {
-        // Fundo da cena de captura: textura de floresta.
-        Kd0 = texture(TextureImage2, texcoords).rgb;
+        // Fundo da cena de captura: imagem mapa-captura.png (gerada pelo ChatGPT).
+        Kd0 = texture(TextureImage15, texcoords).rgb;
     }
     else if ( object_id == UI_PANEL )
     {
         // Painel da janela de armazenamento (escuro)
         Kd0 = vec3(0.11, 0.12, 0.20);
+    }
+    else if ( object_id == UI_BORDER )
+    {
+        // Borda da caixinha de cada Pokémon (dourado claro)
+        Kd0 = vec3(0.95, 0.82, 0.30);
+    }
+    else if ( object_id == UI_TEAM_RED )
+    {
+        Kd0 = vec3(0.85, 0.18, 0.18); // Time Valor
+    }
+    else if ( object_id == UI_TEAM_BLUE )
+    {
+        Kd0 = vec3(0.16, 0.40, 0.85); // Time Mystic
+    }
+    else if ( object_id == UI_TEAM_YELLOW )
+    {
+        Kd0 = vec3(0.95, 0.78, 0.15); // Time Instinct
     }
     else if ( object_id == UI_ICON )
     {
@@ -211,10 +268,15 @@ void main()
     {
         Kd0 = texture(TextureImage12, texcoords).rgb;
     }
+    else if ( object_id == UI_THUMB_2 )
+    {
+        Kd0 = texture(TextureImage14, texcoords).rgb;
+    }
 
     // Objetos "chapados" (sem iluminação): fundo de captura e interface 2D.
-    if ( object_id == CAPTURE_BG || object_id == UI_PANEL
-         || object_id == UI_ICON || object_id == UI_THUMB )
+    if ( object_id == CAPTURE_BG || object_id == UI_PANEL || object_id == UI_BORDER
+         || object_id == UI_ICON || object_id == UI_THUMB || object_id == UI_THUMB_2
+         || object_id == UI_TEAM_RED || object_id == UI_TEAM_BLUE || object_id == UI_TEAM_YELLOW )
     {
         color = vec4(pow(Kd0, vec3(1.0/2.2)), 1.0);
         return;
@@ -233,9 +295,9 @@ void main()
         Ks = vec3(0.0);
         q  = 1.0;
     }
-    else if ( object_id == PIKACHU || object_id == POKESTOP || object_id == GYM_TOP || object_id == POKEBALL )
+    else if ( object_id == PIKACHU || object_id == CHARMANDER || object_id == POKESTOP || object_id == GYM_TOP || object_id == POKEBALL )
     {
-        // Pikachu, disco do PokéStop, dourado do gym e pokébola: mais "polidos"
+        // Pikachu, Charmander, disco do PokéStop, dourado do gym e pokébola: mais "polidos"
         Ks = vec3(0.5);
         q  = 64.0;
     }

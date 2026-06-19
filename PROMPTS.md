@@ -93,3 +93,66 @@ reaparece para nova tentativa."
 na captura + fundo `CAPTURE_BG`; Pokébola (`pokebola.obj`) por UV; arremesso com
 `EvalCubicBezier`; barra na HUD; `srand`/`rand`. (`src/main.cpp`,
 `src/shader_fragment.glsl`, `data/pokebola_tex.png`)
+
+**13. Armazenamento e múltiplos tipos de Pokémon**
+Prompt: "Generalize o jogo para suportar mais de um tipo de Pokémon (Pikachu e
+Charmander), incluindo no armazenamento. Crie uma tabela de tipos com malha,
+object_id/textura, miniatura, e ajustes de escala/posição/rotação por tipo. Cada
+Pokémon capturado guarda seu tipo e um número por tipo (Pikachu 1, Charmander 1,
+...). A grade de miniaturas e a tela de detalhe (modelo 3D girando + HP/XP/ataques
+aleatórios) usam os parâmetros do tipo correspondente."
+→ Tabela `PokemonType g_PokeTypes[]`; campo `pokeType` em `SceneEntity` e
+`type`/`number` em `CapturedPokemon`; detecção de captura genérica (`pokeType>=0`);
+miniatura/detalhe por tipo. Modelo `charmander.obj` (normalizado) + texturas
+`tex_charmander.png`/`charmander_icon.png`. (`src/main.cpp`,
+`src/shader_fragment.glsl`, `data/charmander.obj`, `data/tex_charmander.png`,
+`data/charmander_icon.png`)
+
+**14. Itens consumíveis na captura (CP, gasto de Pokébola, fundo)**
+Prompt: "Na cena de captura mostre o nome do Pokémon e o CP (sorteado ao iniciar e
+reutilizado se capturar). A captura consome Pokébolas: cada lançamento gasta uma; se
+o jogador estiver sem, bloqueie a mira e mostre um aviso para coletar nas PokéStops
+(e não desenhe a Pokébola na mão). Use uma imagem de fundo própria na cena."
+→ `g_CaptureCP`; HUD com nome+CP e contador de Pokébolas; gating do arremesso por
+`g_NumPokeballs`; campo `cp` em `CapturedPokemon` (antes `xp`). Fundo `CAPTURE_BG`
+trocado para `mapa-captura.png` (TextureImage15). (`src/main.cpp`,
+`src/shader_fragment.glsl`, `data/mapa-captura.png`)
+
+**15. Spawns aleatórios dos Pokémon**
+Prompt: "A cada execução, posicione os Pokémon em lugares aleatórios (6 Pikachus e 6
+Charmanders), sem nascer em cima do jogador nem um sobre o outro."
+→ `randomSpot()` com `rand()` (semeado por `srand(time)`), rejeição por distância
+mínima da origem e dos já posicionados (`placedSpots`). (`src/main.cpp`)
+
+**16. Armazenamento: miniaturas em 3D, borda e fechar**
+Prompt: "No armazenamento, as miniaturas devem ser o próprio modelo 3D do Pokémon
+(como no mapa), cada um numa caixinha com borda. Fechar a janela com ESC ou clique
+fora. Mostre só o nome do tipo (sem numeração)."
+→ Render por célula com `glViewport` (mini-câmera por miniatura, girando) + moldura
+`UI_BORDER`; fecha por clique-fora/ESC; rótulos = nome do tipo. (`src/main.cpp`,
+`src/shader_fragment.glsl`)
+
+**17. Times e ginásios (deixar Pokémon)**
+Prompt: "Ao abrir o jogo, um modal pede para escolher um time (vermelho/azul/
+amarelo). Os ginásios começam cinza (livres); chegando perto e clicando num livre,
+abre um modal (clique ou Y/N) perguntando se quer deixar um Pokémon. Se sim, abre o
+armazenamento para escolher e o ginásio fica com a cor do time."
+→ `enum class Team`, `g_PlayerTeam`, modais 2D (escolha de time / deixar Pokémon),
+picking de ginásio por clique gated por proximidade, modo "colocar" no armazenamento.
+(`src/main.cpp`, `src/shader_fragment.glsl`)
+
+**18. Modelos do Pokémon GO (ginásios e PokéStops)**
+Prompt: "Use o pacote glTF em data/pokemon-go-assets para trocar os ginásios e as
+PokéStops. Ginásios: uma variante por cor de time (+ cinza para livre), sempre o
+modelo completo. PokéStops com dois eixos independentes: a forma muda pela
+distância (longe = fechada, perto = aberta) e a cor pela interação (azul =
+disponível, cinza = em cooldown de 30s após coletar). Coleta por clique, só de
+perto e disponível."
+→ glTF convertido com trimesh (`scene.dump()` aplica transforms): cores dos
+materiais assadas como cor por vértice, normalizado (centrado, base no chão,
+altura 1) → `graygym/redgym/blegym/yellowgym.obj` e `openstop/closedstop.obj`.
+Ginásios via `GYM_MODEL` (usa `vertex_color`). PokéStop: malha pela proximidade
+(`openstop`/`closedstop`) e cor por object_id (`POKESTOP` azul / `POKESTOP_COOLDOWN`
+cinza, sólidos); coleta por clique (`g_StopClickCheck`) exige perto + disponível.
+Fonte do pacote em FONTES.txt (Sketchfab). (`src/main.cpp`,
+`src/shader_fragment.glsl`, `data/*gym.obj`, `data/*stop.obj`)

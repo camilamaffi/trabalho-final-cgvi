@@ -1,4 +1,3 @@
-https://polyhaven.com/a/rocky_terrain_02
 https://polyhaven.com/a/red_brick
 
 Boneco do jogador (adventurer.obj) - "Adventurer" por Quaternius, licenca CC0 (dominio publico)
@@ -7,9 +6,21 @@ https://quaternius.com/
 Observacao: modelo original em GLB; convertido para OBJ mantendo as UVs; a textura
 da paleta original foi salva em data/adventurer_palette.png e mapeada por UV.
 
-Texturas tex_pikachu.png, tex_stone.png, tex_metal.png, tex_dark.png e rocket_r.png:
-geradas pela propria dupla (Python/PIL) - sem fonte externa.
+Texturas tex_pikachu.png, tex_stone.png, tex_metal.png, tex_dark.png, rocket_r.png,
+tex_charmander.png e charmander_icon.png: geradas pela propria dupla (Python/PIL) - sem fonte externa.
 
-Ginasio (gym.obj) - modelo do PokeGym (impressao 3D), partes STL em data/gym/gym/
-montadas e convertidas para um unico OBJ com cores por vertice.
+Charmander (charmander.obj): modelo feito pela propria dupla (sem fonte externa);
+normalizado (centrado na origem e escalado para altura 1; UVs preservadas).
+
+Fundo da cena de captura (mapa-captura.png): imagem gerada pelo ChatGPT (OpenAI).
+
+Ginasios (graygym.obj, redgym.obj, blegym.obj, yellowgym.obj) e PokeStops
+(openstop.obj, closedstop.obj) - extraidos do pacote "Pokemon GO Assets" (glTF)
+em data/pokemon-go-assets/.
+Fonte: https://sketchfab.com/3d-models/pokemon-go-assets-e142f01c01ed48af96a0637debb6457a
+Convertidos pela dupla para OBJ com cor por vertice (assada a partir dos materiais
+do glTF), normalizados (centrados, base no chao, altura 1). Ginasios separados em
+variantes por cor de time (+ cinza para os livres).
+
+Ginasio antigo (gym.obj) - NAO mais usado. Era o modelo do PokeGym (impressao 3D):
 https://www.dorchester3d.com/pt/impressao/blogue/2016/08/pokemon-go-gym
