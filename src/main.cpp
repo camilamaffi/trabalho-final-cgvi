@@ -1446,12 +1446,12 @@ int main(int argc, char* argv[])
             {
                 // --- Textos da GRADE ---
                 char titulo[48];
-                snprintf(titulo, sizeof(titulo), "Meus Pokemons (%d/100)", g_CapturedCount);
+                snprintf(titulo, sizeof(titulo), "Meus Pokemon (%d/100)", g_CapturedCount);
                 TextRendering_PrintString(window, titulo, -0.26f, 0.58f, 1.4f);
 
                 if (g_CapturedCount == 0)
                 {
-                    TextRendering_PrintString(window, "Vazio - capture pokemons!", -0.28f, 0.0f, 1.1f);
+                    TextRendering_PrintString(window, "Vazio - capture pokemon!", -0.28f, 0.0f, 1.1f);
                 }
                 else
                 {
