@@ -118,7 +118,7 @@ void PopMatrix(glm::mat4& M);
 void BuildTrianglesAndAddToVirtualScene(ObjModel*); // Constrói representação de um ObjModel como malha de triângulos para renderização
 void ComputeNormals(ObjModel* model); // Computa normais de um ObjModel, caso não existam.
 void LoadShadersFromFiles(); // Carrega os shaders de vértice e fragmento, criando um programa de GPU
-void LoadTextureImage(const char* filename, bool nearest = false, bool tiling = false); // Função que carrega imagens de textura
+void LoadTextureImage(const char* filename, bool nearest = false, bool tiling = false, bool alpha = false); // Função que carrega imagens de textura
 void DrawVirtualObject(const char* object_name); // Desenha um objeto armazenado em g_VirtualScene
 GLuint LoadShader_Vertex(const char* filename);   // Carrega um vertex shader
 GLuint LoadShader_Fragment(const char* filename); // Carrega um fragment shader
@@ -486,6 +486,10 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/charmander_icon.png");   // TextureImage14 - miniatura do charmander (UI)
     // FONTE: mapa-captura.png - imagem de fundo da cena de captura, gerada pelo ChatGPT (OpenAI).
     LoadTextureImage("../../data/mapa-captura.png");      // TextureImage15 - fundo da cena de captura
+    // Logos dos times (Pokémon GO), com transparência (alpha) para recortar no modal.
+    LoadTextureImage("../../data/valor.png",    false, false, true); // TextureImage16 - logo Valor (vermelho)
+    LoadTextureImage("../../data/mystic.png",   false, false, true); // TextureImage17 - logo Mystic (azul)
+    LoadTextureImage("../../data/instinct.png", false, false, true); // TextureImage18 - logo Instinct (amarelo)
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel cubemodel("../../data/cube.obj");
@@ -603,6 +607,9 @@ int main(int argc, char* argv[])
     #define GYM_BLUE          26
     #define GYM_YELLOW        27
     #define GYM_MODEL         28
+    #define UI_LOGO_VALOR     29
+    #define UI_LOGO_MYSTIC    30
+    #define UI_LOGO_INSTINCT  31
 
     // Tabela de tipos de Pokémon. Centraliza tudo que varia entre um tipo e
     // outro (malha, textura/object_id, miniatura na UI, e os ajustes de
@@ -1805,14 +1812,20 @@ int main(int argc, char* argv[])
             // Painel de fundo do modal
             DrawUIQuad(0.0f, 0.0f, 0.62f, 0.50f, UI_PANEL);
 
-            // Três botões coloridos (Vermelho / Azul / Amarelo)
+            // Três botões coloridos (Vermelho / Azul / Amarelo) com o logo do time.
             const float bx[3]  = { -0.34f, 0.00f, 0.34f };
             const int   bid[3] = { UI_TEAM_RED, UI_TEAM_BLUE, UI_TEAM_YELLOW };
+            const int   lid[3] = { UI_LOGO_VALOR, UI_LOGO_MYSTIC, UI_LOGO_INSTINCT };
             const float bhw = 0.13f / aspect; // meia-largura (corrigida pela proporção)
             const float bhh = 0.20f;          // meia-altura
             const float bcy = -0.06f;         // centro Y dos botões
+            const float lhh = 0.12f;          // meia-altura do logo (quadrado)
+            const float lhw = lhh / aspect;
             for (int b = 0; b < 3; ++b)
-                DrawUIQuad(bx[b], bcy, bhw, bhh, bid[b]);
+            {
+                DrawUIQuad(bx[b], bcy, bhw, bhh, bid[b]);    // botão colorido
+                DrawUIQuad(bx[b], bcy, lhw, lhh, lid[b]);    // logo recortado por cima
+            }
 
             glEnable(GL_DEPTH_TEST);
             glEnable(GL_CULL_FACE);
@@ -1824,7 +1837,7 @@ int main(int argc, char* argv[])
                 float ttw = title.size() * TextRendering_CharWidth(window) * ts;
                 TextRendering_PrintString(window, title, -ttw * 0.5f, 0.34f, ts);
 
-                const char* names[3] = { "Vermelho", "Azul", "Amarelo" };
+                const char* names[3] = { "Valor", "Mystic", "Instinct" };
                 float ls = 1.0f;
                 for (int b = 0; b < 3; ++b)
                 {
@@ -1943,16 +1956,18 @@ bool CheckCollision(float playerX, float playerZ, float playerHalfSize)
 }
 
 // Função que carrega uma imagem para ser utilizada como textura
-void LoadTextureImage(const char* filename, bool nearest, bool tiling)
+void LoadTextureImage(const char* filename, bool nearest, bool tiling, bool alpha)
 {
     printf("Carregando imagem \"%s\"... ", filename);
 
-    // Primeiro fazemos a leitura da imagem do disco
+    // Primeiro fazemos a leitura da imagem do disco. alpha=true mantém o canal
+    // de transparência (RGBA), usado por imagens com fundo transparente (logos).
     stbi_set_flip_vertically_on_load(true);
     int width;
     int height;
     int channels;
-    unsigned char *data = stbi_load(filename, &width, &height, &channels, 3);
+    int desired = alpha ? 4 : 3;
+    unsigned char *data = stbi_load(filename, &width, &height, &channels, desired);
 
     if ( data == NULL )
     {
@@ -1988,7 +2003,9 @@ void LoadTextureImage(const char* filename, bool nearest, bool tiling)
     GLuint textureunit = g_NumLoadedTextures;
     glActiveTexture(GL_TEXTURE0 + textureunit);
     glBindTexture(GL_TEXTURE_2D, texture_id);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+    GLint  internalFmt = alpha ? GL_SRGB8_ALPHA8 : GL_SRGB8;
+    GLenum dataFmt     = alpha ? GL_RGBA : GL_RGB;
+    glTexImage2D(GL_TEXTURE_2D, 0, internalFmt, width, height, 0, dataFmt, GL_UNSIGNED_BYTE, data);
     glGenerateMipmap(GL_TEXTURE_2D);
     glBindSampler(textureunit, sampler_id);
 
@@ -2091,6 +2108,9 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage13"), 13);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage14"), 14);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage15"), 15);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage16"), 16);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage17"), 17);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage18"), 18);
     glUseProgram(0);
 }
 

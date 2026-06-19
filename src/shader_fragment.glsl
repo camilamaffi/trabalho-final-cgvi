@@ -50,6 +50,9 @@ uniform mat4 projection;
 #define GYM_BLUE          26
 #define GYM_YELLOW        27
 #define GYM_MODEL         28
+#define UI_LOGO_VALOR     29
+#define UI_LOGO_MYSTIC    30
+#define UI_LOGO_INSTINCT  31
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -73,6 +76,9 @@ uniform sampler2D TextureImage12; // miniatura do pikachu (UI)
 uniform sampler2D TextureImage13; // charmander (via UV)
 uniform sampler2D TextureImage14; // miniatura do charmander (UI)
 uniform sampler2D TextureImage15; // fundo da cena de captura (mapa-captura.png)
+uniform sampler2D TextureImage16; // logo do time Valor (UI, com alpha)
+uniform sampler2D TextureImage17; // logo do time Mystic (UI, com alpha)
+uniform sampler2D TextureImage18; // logo do time Instinct (UI, com alpha)
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -271,6 +277,20 @@ void main()
     else if ( object_id == UI_THUMB_2 )
     {
         Kd0 = texture(TextureImage14, texcoords).rgb;
+    }
+
+    // Logos dos times: imagens com transparência. Amostramos RGBA e descartamos
+    // os fragmentos transparentes (fundo), mostrando só o emblema sobre o botão.
+    if ( object_id == UI_LOGO_VALOR || object_id == UI_LOGO_MYSTIC || object_id == UI_LOGO_INSTINCT )
+    {
+        vec4 logo;
+        if ( object_id == UI_LOGO_VALOR )       logo = texture(TextureImage16, texcoords);
+        else if ( object_id == UI_LOGO_MYSTIC ) logo = texture(TextureImage17, texcoords);
+        else                                    logo = texture(TextureImage18, texcoords);
+        if ( logo.a < 0.5 )
+            discard;
+        color = vec4(pow(logo.rgb, vec3(1.0/2.2)), 1.0);
+        return;
     }
 
     // Objetos "chapados" (sem iluminação): fundo de captura e interface 2D.

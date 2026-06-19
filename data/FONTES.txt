@@ -14,6 +14,10 @@ normalizado (centrado na origem e escalado para altura 1; UVs preservadas).
 
 Fundo da cena de captura (mapa-captura.png): imagem gerada pelo ChatGPT (OpenAI).
 
+Logos dos times (valor.png, mystic.png, instinct.png): emblemas oficiais das
+equipes do Pokemon GO (Valor / Mystic / Instinct) - Niantic/The Pokemon Company.
+Usados na tela de selecao de time.
+
 Ginasios (graygym.obj, redgym.obj, blegym.obj, yellowgym.obj) e PokeStops
 (openstop.obj, closedstop.obj) - extraidos do pacote "Pokemon GO Assets" (glTF)
 em data/pokemon-go-assets/.
