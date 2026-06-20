@@ -292,6 +292,7 @@ GLint g_projection_uniform;
 GLint g_object_id_uniform;
 GLint g_bbox_min_uniform;
 GLint g_bbox_max_uniform;
+GLint g_light_tint_uniform; // tom/intensidade da luz (varia na captura)
 
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
@@ -311,6 +312,14 @@ struct PokeStop
 };
 
 std::vector<PokeStop> g_PokeStops;
+
+// Tipos de item que uma PokéStop pode dar.
+enum ItemType { ITEM_POKEBALL = 0, ITEM_POTION = 1, ITEM_BERRY = 2 };
+
+// Itens "voando" da PokéStop até o jogador ao coletar. Cada um percorre uma
+// curva de Bézier CÚBICA (p0..p3) do poste até o jogador — feedback visual.
+struct FlyingItem { glm::vec3 p0, p1, p2, p3; float t; int type; };
+std::vector<FlyingItem> g_FlyingItems;
 
 // Ginásios: posição na base (no chão), o time dono (None = cinza/livre) e o
 // tipo de Pokémon deixado lá (-1 = nenhum). Quando o jogador deixa um Pokémon,
@@ -332,6 +341,7 @@ bool g_GymClickCheck   = false; // pedido de teste de clique num ginásio (feito
 // Inventário do jogador
 int g_NumPokeballs = 0;
 int g_NumPotions   = 0;
+int g_NumBerries   = 0;
 
 // Mensagem temporária mostrada na tela (ex.: "PokéStop! +2 Pokébola")
 std::string g_Message;
@@ -523,6 +533,16 @@ int main(int argc, char* argv[])
     ObjModel closedstopmodel("../../data/closedstop.obj");
     ComputeNormals(&closedstopmodel);
     BuildTrianglesAndAddToVirtualScene(&closedstopmodel);
+
+    // Itens das PokéStops (mesmo pacote do Pokémon GO): poção e fruta (berry).
+    // Cor por vértice, convertidos do glTF.
+    ObjModel potionmodel("../../data/potion.obj");
+    ComputeNormals(&potionmodel);
+    BuildTrianglesAndAddToVirtualScene(&potionmodel);
+
+    ObjModel berrymodel("../../data/berry.obj");
+    ComputeNormals(&berrymodel);
+    BuildTrianglesAndAddToVirtualScene(&berrymodel);
 
     // Pokébola (modelo feito pela dupla; esfera UV "Esfera_UV").
     ObjModel pokebolamodel("../../data/pokebola.obj");
@@ -1060,6 +1080,19 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
         glUniformMatrix4fv(g_projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
 
+        // Tom da luz: neutro (branco) no mundo; na cena de captura, varia
+        // suavemente entre uma luz quente (dia) e fria (entardecer) ao longo do
+        // tempo, simulando o período do dia.
+        glm::vec3 lightTint = glm::vec3(1.0f);
+        if (g_CurrentScene == GameScene::Capture)
+        {
+            float dayT = sinf((float)glfwGetTime() * 0.5f) * 0.5f + 0.5f; // 0..1
+            glm::vec3 warm = glm::vec3(1.15f, 1.00f, 0.80f); // luz de dia (quente)
+            glm::vec3 cool = glm::vec3(0.65f, 0.75f, 1.05f); // entardecer (fria)
+            lightTint = warm * (1.0f - dayT) + cool * dayT;
+        }
+        glUniform3f(g_light_tint_uniform, lightTint.x, lightTint.y, lightTint.z);
+
         // desenha o jogador
         if (g_CurrentScene != GameScene::Capture)
         {
@@ -1146,10 +1179,17 @@ int main(int argc, char* argv[])
                 appearScale *= std::max(0.0f, 1.0f - g_CaughtTimer / 0.8f);
             }
 
+            // Oscilação leve dos Pokémon no mapa — animação por tempo. Só sobe a
+            // partir do chão (0..amplitude) para nunca afundar no terreno. A fase
+            // usa o índice para não balançarem todos em sincronia.
+            float bobY = 0.0f;
+            if (obj.pokeType >= 0 && g_CurrentScene != GameScene::Capture)
+                bobY = (sinf((float)glfwGetTime() * 2.0f + (float)i) * 0.5f + 0.5f) * 0.06f;
+
             model =
                 Matrix_Translate(
                     obj.position.x,
-                    obj.position.y,
+                    obj.position.y + bobY,
                     obj.position.z)
                 *
                 (
@@ -1270,19 +1310,47 @@ int main(int argc, char* argv[])
                         float ddy = (float)g_ClickPosY - sy;
                         if (ddx*ddx + ddy*ddy < hitR*hitR)
                         {
-                            // Coleta: ganha itens (respeitando o máximo) e entra em cooldown.
-                            int gainedBalls   = std::min(2, ITEM_MAX - g_NumPokeballs);
-                            int gainedPotions = std::min(1, ITEM_MAX - g_NumPotions);
-                            g_NumPokeballs += gainedBalls;
-                            g_NumPotions   += gainedPotions;
-                            stop.cooldown   = POKESTOP_COOLDOWN_TIME;
+                            // Coleta: sorteia de 1 a 7 itens aleatórios entre
+                            // Pokébola, Poção e Fruta (respeitando o máximo) e entra
+                            // em cooldown. Cada item ganho voa até o jogador.
+                            int total = 1 + rand() % 7; // 1..7 itens
+                            int gB = 0, gP = 0, gF = 0;
+                            glm::vec3 start = glm::vec3(stop.position.x, stop.position.y + POKESTOP_SIZE, stop.position.z);
+                            glm::vec3 endp  = glm::vec3(g_PlayerX, -0.7f, g_PlayerZ);
+
+                            for (int k = 0; k < total; ++k)
+                            {
+                                // O 1º item é SEMPRE Pokébola (garante pelo menos uma;
+                                // se vier só 1 item, é Pokébola). Os demais sorteados.
+                                int type = (k == 0) ? ITEM_POKEBALL : (rand() % 3); // 0=Pokébola,1=Poção,2=Fruta
+                                bool added = false;
+                                if      (type == ITEM_POKEBALL && g_NumPokeballs < ITEM_MAX) { g_NumPokeballs++; gB++; added = true; }
+                                else if (type == ITEM_POTION   && g_NumPotions   < ITEM_MAX) { g_NumPotions++;   gP++; added = true; }
+                                else if (type == ITEM_BERRY    && g_NumBerries   < ITEM_MAX) { g_NumBerries++;   gF++; added = true; }
+                                if (!added)
+                                    continue; // tipo cheio: não voa
+
+                                glm::vec3 d = endp - start;
+                                float sx2 = (((float)rand()/RAND_MAX) - 0.5f) * 0.5f; // espalha um pouco
+                                float sz2 = (((float)rand()/RAND_MAX) - 0.5f) * 0.5f;
+                                FlyingItem fi;
+                                fi.type = type;
+                                fi.p0 = start;
+                                fi.p1 = start + d*0.33f + glm::vec3(sx2, 0.9f, sz2);
+                                fi.p2 = start + d*0.66f + glm::vec3(sx2, 0.6f, sz2);
+                                fi.p3 = endp;
+                                fi.t  = -0.10f * k; // atraso escalonado de largada
+                                g_FlyingItems.push_back(fi);
+                            }
+
+                            stop.cooldown = POKESTOP_COOLDOWN_TIME;
                             available = false; // coletou: fica cinza (cooldown)
 
                             char buf[128];
-                            if (gainedBalls == 0 && gainedPotions == 0)
+                            if (gB == 0 && gP == 0 && gF == 0)
                                 snprintf(buf, sizeof(buf), "PokeStop: mochila cheia!");
                             else
-                                snprintf(buf, sizeof(buf), "PokeStop! +%d Pokebola, +%d Pocao", gainedBalls, gainedPotions);
+                                snprintf(buf, sizeof(buf), "PokeStop! +%d Pokebola, +%d Pocao, +%d Fruta", gB, gP, gF);
                             g_Message      = buf;
                             g_MessageTimer = 2.5f;
                         }
@@ -1294,7 +1362,11 @@ int main(int argc, char* argv[])
                 //  - COR pelo cooldown: disponível = azul, em cooldown = cinza.
                 const char* stopMesh = nearStop  ? "openstop" : "closedstop";
                 int  stopColorId     = available ? POKESTOP   : POKESTOP_COOLDOWN;
+                // Quando disponível, a PokéStop gira lentamente em Y (animação por
+                // tempo, como o disco girando no jogo); em cooldown fica parada.
+                float stopSpin = available ? (float)glfwGetTime() * 1.2f : 0.0f;
                 model = Matrix_Translate(stop.position.x, stop.position.y, stop.position.z)
+                      * Matrix_Rotate_Y(stopSpin)
                       * Matrix_Scale(POKESTOP_SIZE, POKESTOP_SIZE, POKESTOP_SIZE);
                 glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
                 glUniform1i(g_object_id_uniform, stopColorId);
@@ -1310,6 +1382,41 @@ int main(int argc, char* argv[])
                 g_MessageTimer -= delta_t;
                 if (g_MessageTimer < 0.0f)
                     g_MessageTimer = 0.0f;
+            }
+
+            // ---- Itens voando (PokéStop -> jogador) por Bézier cúbica ----------
+            for (size_t k = 0; k < g_FlyingItems.size(); )
+            {
+                FlyingItem& fi = g_FlyingItems[k];
+                fi.t += delta_t / 0.6f; // ~0.6 s de voo (animação por Δt)
+
+                if (fi.t >= 1.0f)
+                {
+                    g_FlyingItems.erase(g_FlyingItems.begin() + k);
+                    continue; // não incrementa k
+                }
+
+                if (fi.t >= 0.0f) // t negativo = atraso de largada
+                {
+                    // Modelo, object_id e escala conforme o tipo do item.
+                    const char* mesh   = "Esfera_UV";
+                    int         objid  = POKEBALL;
+                    float       isc    = 0.04f;
+                    if (fi.type == ITEM_POTION) { mesh = "potion"; objid = GYM_MODEL; isc = 0.12f; }
+                    else if (fi.type == ITEM_BERRY) { mesh = "berry"; objid = GYM_MODEL; isc = 0.12f; }
+
+                    glm::vec3 pos = EvalCubicBezier(fi.p0, fi.p1, fi.p2, fi.p3, fi.t);
+                    float spin = (float)glfwGetTime() * 6.0f;
+                    model = Matrix_Translate(pos.x, pos.y, pos.z)
+                          * Matrix_Rotate_Y(spin)
+                          * Matrix_Scale(isc, isc, isc);
+                    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                    glUniform1i(g_object_id_uniform, objid);
+                    glDisable(GL_CULL_FACE);
+                    DrawVirtualObject(mesh);
+                    glEnable(GL_CULL_FACE);
+                }
+                ++k;
             }
         }
 
@@ -1581,7 +1688,7 @@ int main(int argc, char* argv[])
         if (g_CurrentScene != GameScene::Capture && !g_TeamModalOpen)
         {
             char inv[128];
-            snprintf(inv, sizeof(inv), "Pokebolas: %d   Pocoes: %d", g_NumPokeballs, g_NumPotions);
+            snprintf(inv, sizeof(inv), "Pokebolas: %d   Pocoes: %d   Frutas: %d", g_NumPokeballs, g_NumPotions, g_NumBerries);
             TextRendering_PrintString(window, inv, -0.98f, 0.90f, 1.0f);
 
             // Indicador do modo de câmera (tecla C alterna)
@@ -2053,6 +2160,7 @@ void LoadShadersFromFiles()
     g_view_uniform       = glGetUniformLocation(g_GpuProgramID, "view"); // Variável da matriz "view" em shader_vertex.glsl
     g_projection_uniform = glGetUniformLocation(g_GpuProgramID, "projection"); // Variável da matriz "projection" em shader_vertex.glsl
     g_object_id_uniform  = glGetUniformLocation(g_GpuProgramID, "object_id"); // Variável "object_id" em shader_fragment.glsl
+    g_light_tint_uniform = glGetUniformLocation(g_GpuProgramID, "light_tint"); // Tom da luz (varia na captura)
     g_bbox_min_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_min");
     g_bbox_max_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_max");
 

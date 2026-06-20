@@ -19,9 +19,9 @@ Pokemon GO (Valor / Mystic / Instinct). Imagens obtidas em https://www.clipartma
 (marca/emblemas originais da Niantic/The Pokemon Company). Redimensionadas pela dupla
 para 512x512 mantendo a transparencia. Usadas na tela de selecao de time.
 
-Ginasios (graygym.obj, redgym.obj, blegym.obj, yellowgym.obj) e PokeStops
-(openstop.obj, closedstop.obj) - extraidos do pacote "Pokemon GO Assets" (glTF)
-em data/pokemon-go-assets/.
+Ginasios (graygym.obj, redgym.obj, blegym.obj, yellowgym.obj), PokeStops
+(openstop.obj, closedstop.obj) e itens (potion.obj, berry.obj) - extraidos do
+pacote "Pokemon GO Assets" (glTF) em data/pokemon-go-assets/.
 Fonte: https://sketchfab.com/3d-models/pokemon-go-assets-e142f01c01ed48af96a0637debb6457a
 Convertidos pela dupla para OBJ com cor por vertice (assada a partir dos materiais
 do glTF), normalizados (centrados, base no chao, altura 1). Ginasios separados em

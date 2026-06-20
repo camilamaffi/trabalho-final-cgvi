@@ -192,3 +192,12 @@ movimentação da câmera não pode deixar aparecer os vazios atrás das placas.
 + V invertido no shader (em pé); culling ligado (placa some atrás da câmera). Câmera
 3ª pessoa travada dentro do cercado (`±5.2` em XZ, `y∈[0.3,7.0]`) e clear color de
 céu. (`src/main.cpp`, `src/shader_fragment.glsl`)
+
+**23. Animações que faltavam na SPEC (pokéstop, oscilação, luz da captura)**
+Prompt: "Reveja a SPEC e implemente o que está prometido mas faltando sem precisar
+de modelo novo: as PokéStops devem girar, os Pokémon devem oscilar de leve no mapa
+(sem afundar no chão) e a cena de captura deve variar a iluminação (período do dia)."
+→ PokéStop disponível gira em Y (`time*1.2`); Pokémon flutuam só pra cima
+(`(sin(time*2+i)*0.5+0.5)*0.06`); uniform `light_tint` no shader multiplica `I`/`Ia`
+(neutro no mundo, varia quente↔frio na captura). Tudo por `glfwGetTime` (Δt).
+(`src/main.cpp`, `src/shader_fragment.glsl`)

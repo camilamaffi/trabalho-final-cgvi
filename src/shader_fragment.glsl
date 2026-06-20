@@ -21,6 +21,10 @@ uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
+// Tom/intensidade da luz (1,1,1 = neutro). Varia na cena de captura para simular
+// o período do dia. Enviado pelo código C++ a cada frame.
+uniform vec3 light_tint;
+
 // Identificador que define qual objeto está sendo desenhado no momento
 #define CUBE         1
 #define PLANE        2
@@ -324,9 +328,10 @@ void main()
         q  = 64.0;
     }
 
-    // Intensidades da fonte de luz e da luz ambiente
-    vec3 I  = vec3(1.0, 1.0, 1.0); // espectro da fonte de luz
-    vec3 Ia = vec3(0.25);          // espectro da luz ambiente
+    // Intensidades da fonte de luz e da luz ambiente. O "light_tint" varia a cor/
+    // intensidade da luz (usado na cena de captura para simular o período do dia).
+    vec3 I  = vec3(1.0, 1.0, 1.0) * light_tint; // espectro da fonte de luz
+    vec3 Ia = vec3(0.25)          * light_tint; // espectro da luz ambiente
 
     // Reflectâncias ambiente e difusa derivadas da cor do objeto (Kd0)
     vec3 Kd = Kd0;
