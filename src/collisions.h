@@ -56,4 +56,11 @@ extern std::vector<SceneEntity>           g_Entities;
 int  FindCollidingEntityIndex(float playerX, float playerZ, float playerHalfSize);
 bool CheckCollision(float playerX, float playerZ, float playerHalfSize);
 
+// Colisão círculo-círculo no plano XZ: true se o círculo do jogador (centro
+// playerX,playerZ; raio playerHalfSize) sobrepõe um objeto de centro
+// (objX,objZ) e raio objRadius. Usada para bloquear o jogador contra estruturas
+// sólidas (ginásios e PokéStops).
+bool CircleCollision(float playerX, float playerZ, float playerHalfSize,
+                     float objX, float objZ, float objRadius);
+
 #endif // COLLISIONS_H

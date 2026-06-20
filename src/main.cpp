@@ -726,7 +726,7 @@ int main(int argc, char* argv[])
         // Conversaremos sobre sistemas de cores nas aulas de Modelos de Iluminação.
         //
         //           R     G     B     A
-        glClearColor(0.9f, 0.9f, 1.0f, 1.0f);
+        glClearColor(0.53f, 0.81f, 0.92f, 1.0f); // azul de céu (frestas/topo parecem céu)
 
         // "Pintamos" todos os pixels do framebuffer com a cor definida acima,
         // e também resetamos todos os pixels do Z-buffer (depth buffer).
@@ -798,19 +798,42 @@ int main(int argc, char* argv[])
             if (fabs(moveDirX) > 1e-5f || fabs(moveDirZ) > 1e-5f)
                 g_PlayerAngleY = atan2(moveDirX, moveDirZ);
 
-            // Colisão com todos os objetos registrados
+            // Colisão com as entidades (Pokémon): bloqueia o passo e, ao encostar
+            // num Pokémon, entra na captura (o corpo dele é exibido na cena).
             float playerHalfSize = 0.075f;
             int collidingEntityIndex = FindCollidingEntityIndex(
                 nextPlayerX,
                 nextPlayerZ,
                 playerHalfSize);
 
-            if (collidingEntityIndex == -1)
+            // Bloqueio por ESTRUTURAS sólidas (ginásios e PokéStops): a prioridade
+            // é o jogador — ele não as atravessa, simplesmente não anda. Usa
+            // colisão círculo-círculo (CircleCollision em collisions.cpp).
+            const float GYM_COLLISION_R  = 0.45f; // raio de bloqueio do ginásio
+            const float STOP_COLLISION_R = 0.30f; // raio de bloqueio da PokéStop
+            bool blockedByStructure = false;
+            for (const Gym& gymObj : g_Gyms)
+            {
+                if (CircleCollision(nextPlayerX, nextPlayerZ, playerHalfSize,
+                                    gymObj.position.x, gymObj.position.z, GYM_COLLISION_R))
+                { blockedByStructure = true; break; }
+            }
+            if (!blockedByStructure)
+            {
+                for (const PokeStop& stopObj : g_PokeStops)
+                {
+                    if (CircleCollision(nextPlayerX, nextPlayerZ, playerHalfSize,
+                                        stopObj.position.x, stopObj.position.z, STOP_COLLISION_R))
+                    { blockedByStructure = true; break; }
+                }
+            }
+
+            if (collidingEntityIndex == -1 && !blockedByStructure)
             {
                 g_PlayerX = nextPlayerX;
                 g_PlayerZ = nextPlayerZ;
             }
-            else
+            else if (collidingEntityIndex != -1)
             {
                 const SceneEntity& collidingEntity = g_Entities[collidingEntityIndex];
                 if (collidingEntity.pokeType >= 0)
@@ -824,6 +847,7 @@ int main(int argc, char* argv[])
                     g_CaptureCP     = rand() % 201; // CP do selvagem (mostrado na cena)
                 }
             }
+            // (Se só houve bloqueio por estrutura, o jogador simplesmente não anda.)
         }
 
         if (g_CurrentScene == GameScene::Capture
@@ -976,6 +1000,20 @@ int main(int argc, char* argv[])
             // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
             // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
             camera_position_c  = glm::vec4(x + g_PlayerX, y, z + g_PlayerZ, 1.0f); // Ponto "c", centro da câmera
+
+            // Mantém a câmera DENTRO do cercado de floresta. Se ela sair além das
+            // placas (±5.5), o culling esconde a placa e aparece o vazio atrás;
+            // travando aqui, a câmera sempre vê a face interna das placas.
+            const float CAM_XZ   = 5.2f; // limite horizontal (placas em ±5.5)
+            const float CAM_YMAX = 7.0f; // abaixo do topo das placas (~7.9)
+            const float CAM_YMIN = 0.3f; // não afunda no chão
+            if (camera_position_c.x < -CAM_XZ) camera_position_c.x = -CAM_XZ;
+            if (camera_position_c.x >  CAM_XZ) camera_position_c.x =  CAM_XZ;
+            if (camera_position_c.z < -CAM_XZ) camera_position_c.z = -CAM_XZ;
+            if (camera_position_c.z >  CAM_XZ) camera_position_c.z =  CAM_XZ;
+            if (camera_position_c.y >  CAM_YMAX) camera_position_c.y = CAM_YMAX;
+            if (camera_position_c.y <  CAM_YMIN) camera_position_c.y = CAM_YMIN;
+
             camera_lookat_l    = glm::vec4(g_PlayerX, 0.0f, g_PlayerZ, 1.0f); // Câmera segue o personagem
         }
 
@@ -1084,9 +1122,11 @@ int main(int argc, char* argv[])
             // Na cena de captura, mostramos apenas o Pokémon alvo (esconde o resto).
             if (g_CurrentScene == GameScene::Capture && g_CaptureTargetIndex != static_cast<int>(i))
                 continue;
-            // Fator de visibilidade por aproximação (estilo Pokémon GO).
-            // appearRadius == 0  -> sempre visível.
-            // appearRadius  > 0  -> surge/some suavemente conforme a distância.
+            // Visibilidade por aproximação (estilo Pokémon GO): o Pokémon só
+            // aparece quando o jogador entra no raio (appearRadius), mas aparece
+            // INTEIRO de uma vez — sem crescer gradualmente. Fora do raio, não
+            // é desenhado.
+            // appearRadius == 0 -> sempre visível.
             float appearScale = 1.0f;
             if (obj.appearRadius > 0.0f)
             {
@@ -1094,13 +1134,8 @@ int main(int argc, char* argv[])
                 float dz = g_PlayerZ - obj.position.z;
                 float dist = sqrtf(dx*dx + dz*dz);
 
-                const float fade = 0.6f; // largura da faixa de transição
-                appearScale = (obj.appearRadius - dist) / fade;
-                appearScale = std::max(0.0f, std::min(1.0f, appearScale));
-
-                // Totalmente longe: nem desenha (economiza e fica invisível).
-                if (appearScale <= 0.0f)
-                    continue;
+                if (dist > obj.appearRadius)
+                    continue; // longe: não desenha
             }
 
             // Captura bem-sucedida: o Pokémon alvo "encolhe" para dentro da bola.
@@ -1152,43 +1187,40 @@ int main(int argc, char* argv[])
             if (obj.object_id == CHARMANDER) glEnable(GL_CULL_FACE);
         }
 
-        // Painéis verticais de floresta nos 4 lados — dão sensação de 3D
+        // Painéis verticais de floresta nos 4 lados — dão sensação de 3D.
+        // Todos com a MESMA orientação: o plano (deitado) é levantado por
+        // Rotate_X(-90°) — deixando a textura em pé, chão embaixo — e só GIRADO em
+        // Y para virar para cada lado. Assim a floresta nasce do chão igual nos 4.
         if (g_CurrentScene != GameScene::Capture)
         {
             const float WD  = 5.5f;  // distância da borda do mapa
             const float WHW = 8.0f;  // meia-largura do painel
             const float WHH = 4.5f;  // meia-altura do painel
             const float WCY = WHH - 1.1f; // centro Y: base alinhada ao chão
+            const float HALF_PI = 3.141592f / 2.0f;
+            const float PI      = 3.141592f;
 
+            // Lado: posição (x,z) e yaw (giro em Y para virar ao centro).
+            struct Wall { float x, z, yaw; };
+            const Wall walls[4] = {
+                {  0.0f, -WD,  PI       }, // Norte
+                {  0.0f,  WD,  0.0f     }, // Sul
+                {  WD,   0.0f, HALF_PI  }, // Leste
+                { -WD,   0.0f, -HALF_PI }, // Oeste
+            };
+
+            // Culling LIGADO: cada placa só mostra a face virada para o centro;
+            // quando a câmera passa por trás, a placa some (não tampa a vista).
             glUniform1i(g_object_id_uniform, FOREST_WALL);
-
-            // Norte: Z = -WD, face voltada para +Z (centro)
-            model = Matrix_Translate(0.0f, WCY, -WD)
-                  * Matrix_Rotate_X(3.141592f / 2.0f)
-                  * Matrix_Scale(WHW, 1.0f, WHH);
-            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-            DrawVirtualObject("the_plane");
-
-            // Sul: Z = +WD, face voltada para -Z (centro)
-            model = Matrix_Translate(0.0f, WCY, WD)
-                  * Matrix_Rotate_X(-3.141592f / 2.0f)
-                  * Matrix_Scale(WHW, 1.0f, WHH);
-            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-            DrawVirtualObject("the_plane");
-
-            // Leste: X = +WD, face voltada para -X (centro)
-            model = Matrix_Translate(WD, WCY, 0.0f)
-                  * Matrix_Rotate_Z(3.141592f / 2.0f)
-                  * Matrix_Scale(WHH, 1.0f, WHW);
-            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-            DrawVirtualObject("the_plane");
-
-            // Oeste: X = -WD, face voltada para +X (centro)
-            model = Matrix_Translate(-WD, WCY, 0.0f)
-                  * Matrix_Rotate_Z(-3.141592f / 2.0f)
-                  * Matrix_Scale(WHH, 1.0f, WHW);
-            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-            DrawVirtualObject("the_plane");
+            for (int w = 0; w < 4; ++w)
+            {
+                model = Matrix_Translate(walls[w].x, WCY, walls[w].z)
+                      * Matrix_Rotate_Y(walls[w].yaw)
+                      * Matrix_Rotate_X(-HALF_PI)        // levanta o plano (vira para o centro)
+                      * Matrix_Scale(WHW, 1.0f, WHH);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                DrawVirtualObject("the_plane");
+            }
         }
 
         // ---- PokéStops: cooldown, coleta por proximidade e desenho ----------
@@ -2801,9 +2833,10 @@ void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
         g_CameraPhi   += 0.01f*dy;
 
         // Mantemos a câmera numa faixa de inclinação "estilo Pokémon GO":
-        // nunca totalmente de cima (top-down) nem abaixo do chão.
+        // nunca totalmente de cima (top-down) nem tão rente ao chão a ponto de
+        // ver as placas de borda "de canto" (a textura esticaria no ângulo rasante).
         float phimax = 1.1f;   // ~63°: olhar mais de cima
-        float phimin = 0.25f;  // ~14°: olhar quase rente ao chão
+        float phimin = 0.45f;  // ~26°: limite inferior (evita ângulo rasante)
 
         if (g_CameraPhi > phimax)
             g_CameraPhi = phimax;

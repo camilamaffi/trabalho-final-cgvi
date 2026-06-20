@@ -61,3 +61,14 @@ bool CheckCollision(float playerX, float playerZ, float playerHalfSize)
 {
     return FindCollidingEntityIndex(playerX, playerZ, playerHalfSize) != -1;
 }
+
+// Colisão círculo-círculo no plano XZ (jogador vs estrutura sólida). Verdadeiro
+// quando a distância entre os centros é menor que a soma dos raios.
+bool CircleCollision(float playerX, float playerZ, float playerHalfSize,
+                     float objX, float objZ, float objRadius)
+{
+    float dx  = playerX - objX;
+    float dz  = playerZ - objZ;
+    float sum = playerHalfSize + objRadius;
+    return (dx*dx + dz*dz) < (sum*sum);
+}

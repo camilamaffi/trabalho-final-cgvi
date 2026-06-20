@@ -235,9 +235,10 @@ void main()
     }
     else if ( object_id == FOREST_WALL )
     {
-        // Painéis verticais da floresta — textura normal (sem tile)
+        // Painéis verticais da floresta. V invertido para a imagem ficar em pé
+        // (chão embaixo) com a orientação que levanta a placa virada ao centro.
         U = texcoords.x;
-        V = texcoords.y;
+        V = 1.0 - texcoords.y;
         Kd0 = texture(TextureImage2, vec2(U, V)).rgb;
     }
     else if ( object_id == CAPTURE_BG )

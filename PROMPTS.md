@@ -156,3 +156,39 @@ Ginásios via `GYM_MODEL` (usa `vertex_color`). PokéStop: malha pela proximidad
 cinza, sólidos); coleta por clique (`g_StopClickCheck`) exige perto + disponível.
 Fonte do pacote em FONTES.txt (Sketchfab). (`src/main.cpp`,
 `src/shader_fragment.glsl`, `data/*gym.obj`, `data/*stop.obj`)
+
+**19. Colisão em arquivo separado + estruturas sólidas**
+Prompt: "Coloque os testes de colisão num arquivo à parte chamado collisions.cpp
+(exigência da disciplina). Faça os ginásios e as PokéStops bloquearem o jogador (ele
+não atravessa; a prioridade é o jogador), mantendo os Pokémon: ao encostar, entra na
+captura e o corpo dele é exibido."
+→ `collisions.h` (tipos `SceneObject`/`SceneEntity` + `extern` dos globais +
+protótipos) e `collisions.cpp` (AABB `FindCollidingEntityIndex`/`CheckCollision` +
+`CircleCollision`). Bloqueio por círculo contra `g_Gyms`/`g_PokeStops` no loop de
+movimento; `collisions.cpp` no CMake. (`src/collisions.h`, `src/collisions.cpp`,
+`src/main.cpp`, `CMakeLists.txt`)
+
+**20. Textura em todos os objetos + logos dos times**
+Prompt: "Garanta que TODOS os objetos tenham cor vinda de textura (ginásios e
+pokéstops ficaram sem). Coloque os logos dos times (com transparência) na seleção de
+time, mostrando o nome do time; reduza as imagens grandes."
+→ Ginásios/pokéstops passam a `triplanar(textura) * cor` (reaproveita
+`tex_stone`/`tex_metal`). `LoadTextureImage` com flag `alpha` (RGBA); object_ids
+`UI_LOGO_*` com `discard` do fundo transparente; logos `valor/mystic/instinct.png`
+reduzidos a 512×512 (PIL). Rótulos dos botões = nome do time. (`src/main.cpp`,
+`src/shader_fragment.glsl`, `data/valor.png`, `data/mystic.png`, `data/instinct.png`)
+
+**21. Aparição instantânea do Pokémon**
+Prompt: "O Pokémon não deve surgir crescendo gradualmente — aparece inteiro de uma
+vez ao entrar no raio e some ao sair."
+→ Removido o fade de escala por distância no loop de desenho (mantida a animação de
+encolher na captura). (`src/main.cpp`)
+
+**22. Borda de floresta + câmera sem vazios**
+Prompt: "As placas de floresta da borda estão com orientações diferentes (umas de
+lado, uma de cabeça pra baixo) — deixe todas em pé com o chão embaixo. E a
+movimentação da câmera não pode deixar aparecer os vazios atrás das placas."
+→ 4 placas `FOREST_WALL` unificadas (`Rotate_Y(yaw) * Rotate_X(-90°)`, mesma escala)
++ V invertido no shader (em pé); culling ligado (placa some atrás da câmera). Câmera
+3ª pessoa travada dentro do cercado (`±5.2` em XZ, `y∈[0.3,7.0]`) e clear color de
+céu. (`src/main.cpp`, `src/shader_fragment.glsl`)
