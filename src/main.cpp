@@ -50,6 +50,10 @@
 #include "utils.h"
 #include "matrices.h"
 
+// Tipos da cena (SceneObject/SceneEntity), globais compartilhados e protótipos
+// dos testes de colisão (implementados em collisions.cpp).
+#include "collisions.h"
+
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
 struct ObjModel
@@ -154,18 +158,8 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
 void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
-// Definimos uma estrutura que armazenará dados necessários para renderizar
-// cada objeto da cena virtual.
-struct SceneObject
-{
-    std::string  name;        // Nome do objeto
-    size_t       first_index; // Índice do primeiro vértice dentro do vetor indices[] definido em BuildTrianglesAndAddToVirtualScene()
-    size_t       num_indices; // Número de índices do objeto dentro do vetor indices[] definido em BuildTrianglesAndAddToVirtualScene()
-    GLenum       rendering_mode; // Modo de rasterização (GL_TRIANGLES, GL_TRIANGLE_STRIP, etc.)
-    GLuint       vertex_array_object_id; // ID do VAO onde estão armazenados os atributos do modelo
-    glm::vec3    bbox_min; // Axis-Aligned Bounding Box do objeto
-    glm::vec3    bbox_max;
-};
+// (A estrutura SceneObject agora é definida em "collisions.h", compartilhada
+// entre main.cpp e collisions.cpp.)
 
 // Abaixo definimos variáveis globais utilizadas em várias funções do código.
 
@@ -303,28 +297,8 @@ GLint g_bbox_max_uniform;
 GLuint g_NumLoadedTextures = 0;
 
 // estrutura para armezanar os objetos 3d do cenario
-struct SceneEntity
-{
-    std::string mesh;
-
-    glm::vec3 position;
-    glm::vec3 scale;
-    glm::vec3 localOffset;
-
-    int object_id;
-
-    bool collidable;
-
-    // Raio de aproximação (em unidades de mundo) para o objeto "aparecer".
-    // 0 = sempre visível. > 0 = só desenha quando o jogador chega perto, com
-    // um efeito suave de surgir/sumir (estilo Pokémon GO).
-    float appearRadius = 0.0f;
-
-    // Índice na tabela g_PokeTypes se esta entidade for um Pokémon capturável.
-    // -1 = não é Pokémon (chão, PokéStop, etc.).
-    int pokeType = -1;
-};
-
+// (A estrutura SceneEntity agora é definida em "collisions.h", compartilhada
+// entre main.cpp e collisions.cpp.)
 std::vector<SceneEntity> g_Entities;
 
 // ---- PokéStops e inventário -------------------------------------------------
@@ -363,7 +337,7 @@ int g_NumPotions   = 0;
 std::string g_Message;
 float       g_MessageTimer = 0.0f; // segundos restantes mostrando a mensagem
 
-bool CheckCollision(float playerX, float playerZ, float playerHalfSize);
+// (Protótipos de CheckCollision/FindCollidingEntityIndex estão em "collisions.h".)
 
 // Avalia um ponto de uma curva de Bézier cúbica com pontos de controle
 // p0..p3 no parâmetro t em [0,1]:  B(t) = (1-t)^3 p0 + 3(1-t)^2 t p1
@@ -388,7 +362,6 @@ void DrawUIQuad(float cx, float cy, float hw, float hh, int objid)
     glUniform1i(g_object_id_uniform, objid);
     DrawVirtualObject("the_plane");
 }
-int FindCollidingEntityIndex(float playerX, float playerZ, float playerHalfSize);
 
 int main(int argc, char* argv[])
 {
@@ -1913,47 +1886,8 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-int FindCollidingEntityIndex(float playerX, float playerZ, float playerHalfSize)
-{
-    for (size_t i = 0; i < g_Entities.size(); ++i)
-    {
-        const SceneEntity& obj = g_Entities[i];
-        if (!obj.collidable)
-            continue;
-
-        SceneObject& mesh = g_VirtualScene[obj.mesh];
-
-        float objWidth =
-            (mesh.bbox_max.x - mesh.bbox_min.x)
-            * obj.scale.x;
-
-        float objDepth =
-            (mesh.bbox_max.z - mesh.bbox_min.z)
-            * obj.scale.z;
-
-        float objHalfX = objWidth * 0.5f;
-        float objHalfZ = objDepth * 0.5f;
-
-        bool collisionX =
-            fabs(playerX - obj.position.x)
-            < (playerHalfSize + objHalfX);
-
-        bool collisionZ =
-            fabs(playerZ - obj.position.z)
-            < (playerHalfSize + objHalfZ);
-
-        if (collisionX && collisionZ)
-            return static_cast<int>(i);
-    }
-
-    return -1;
-}
-
-// função para verificar colisao entre o personagem e os objetos do cenario
-bool CheckCollision(float playerX, float playerZ, float playerHalfSize)
-{
-    return FindCollidingEntityIndex(playerX, playerZ, playerHalfSize) != -1;
-}
+// (FindCollidingEntityIndex e CheckCollision foram movidas para collisions.cpp,
+//  conforme a especificação do trabalho.)
 
 // Função que carrega uma imagem para ser utilizada como textura
 void LoadTextureImage(const char* filename, bool nearest, bool tiling, bool alpha)

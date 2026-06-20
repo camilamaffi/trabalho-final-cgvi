@@ -173,13 +173,13 @@ void main()
     }
     else if ( object_id == POKESTOP )
     {
-        // PokéStop disponível: azul sólido (a cor é independente da forma).
-        Kd0 = vec3(0.14, 0.55, 0.95);
+        // PokéStop disponível: textura metálica (triplanar) tingida de azul.
+        Kd0 = triplanar(TextureImage7, position_world.xyz, n.xyz, 2.0) * vec3(0.20, 0.65, 1.10);
     }
     else if ( object_id == POKESTOP_COOLDOWN )
     {
-        // PokéStop em cooldown: cinza sólido.
-        Kd0 = vec3(0.55, 0.55, 0.55);
+        // PokéStop em cooldown: textura de pedra (triplanar) tingida de cinza.
+        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 2.0) * vec3(0.75, 0.75, 0.75);
     }
     else if ( object_id == GYM )
     {
@@ -204,9 +204,10 @@ void main()
     }
     else if ( object_id == GYM_MODEL )
     {
-        // Modelo de ginásio do Pokémon GO: cor por vértice (a cor da torre já
-        // codifica o time; cinza = livre).
-        Kd0 = vertex_color;
+        // Modelo de ginásio do Pokémon GO: textura de pedra (triplanar) modulada
+        // pela cor por vértice (que já codifica o time; cinza = livre). Assim a
+        // cor vem da textura E mantém a identidade do time.
+        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 2.0) * vertex_color * 1.4;
     }
     else if ( object_id == ROCKET )
     {

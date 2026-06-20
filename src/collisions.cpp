@@ -1,0 +1,63 @@
+// =============================================================================
+//  collisions.cpp
+//  Testes de intersecção (colisão) entre o jogador e os objetos da cena.
+//  Mantido em arquivo separado conforme exigido pela especificação do trabalho.
+//
+//  A colisão usa Axis-Aligned Bounding Boxes (AABB) projetadas no plano XZ:
+//  a partir da bounding box da malha (em g_VirtualScene) e da escala da
+//  instância (SceneEntity), calculamos a meia-largura/profundidade do objeto e
+//  testamos a sobreposição contra o "quadrado" do jogador. Tem propósito na
+//  lógica do jogo: bloquear o movimento contra obstáculos e detectar o encosto
+//  num Pokémon para iniciar a captura.
+// =============================================================================
+
+#include <cmath>     // fabs
+#include <cstddef>   // size_t
+
+#include "collisions.h"
+
+// Procura a primeira entidade colidível que está intersectando o jogador na
+// posição (playerX, playerZ). Retorna o índice em g_Entities, ou -1 se nenhuma.
+int FindCollidingEntityIndex(float playerX, float playerZ, float playerHalfSize)
+{
+    for (size_t i = 0; i < g_Entities.size(); ++i)
+    {
+        const SceneEntity& obj = g_Entities[i];
+        if (!obj.collidable)
+            continue;
+
+        SceneObject& mesh = g_VirtualScene[obj.mesh];
+
+        // Largura/profundidade reais = tamanho da bounding box * escala da instância.
+        float objWidth =
+            (mesh.bbox_max.x - mesh.bbox_min.x)
+            * obj.scale.x;
+
+        float objDepth =
+            (mesh.bbox_max.z - mesh.bbox_min.z)
+            * obj.scale.z;
+
+        float objHalfX = objWidth * 0.5f;
+        float objHalfZ = objDepth * 0.5f;
+
+        // Teste de sobreposição de AABB no plano XZ (jogador vs objeto).
+        bool collisionX =
+            fabs(playerX - obj.position.x)
+            < (playerHalfSize + objHalfX);
+
+        bool collisionZ =
+            fabs(playerZ - obj.position.z)
+            < (playerHalfSize + objHalfZ);
+
+        if (collisionX && collisionZ)
+            return static_cast<int>(i);
+    }
+
+    return -1;
+}
+
+// Conveniência: true se o jogador está colidindo com qualquer objeto da cena.
+bool CheckCollision(float playerX, float playerZ, float playerHalfSize)
+{
+    return FindCollidingEntityIndex(playerX, playerZ, playerHalfSize) != -1;
+}
