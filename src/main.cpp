@@ -286,7 +286,7 @@ const char* g_AttacksByType[3][g_NumAttacks] = {
 // também consiga consultá-las.
 //   índices: 0=Pikachu 1=Charmander 2=Snorlax 3=Raichu 4=Charmeleon
 const int g_EvolvesTo[5]   = {  3,  4, -1, -1, -1 }; // tipo destino (-1 = não evolui)
-const int g_EvolveCost[5]  = { 12, 12,  0,  0,  0 }; // doces necessários
+const int g_EvolveCost[5]  = {  3,  3,  0,  0,  0 }; // doces necessários
 const int g_CandyFamily[5] = {  0,  1,  2,  0,  1 }; // família de doces (forma base)
 
 // Doces acumulados por família (0=Pikachu, 1=Charmander, 2=Snorlax). Cada
@@ -511,10 +511,17 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/mystic.png",   false, false, true); // TextureImage17 - logo Mystic (azul)
     LoadTextureImage("../../data/instinct.png", false, false, true); // TextureImage18 - logo Instinct (amarelo)
     LoadTextureImage("../../data/tex_snorlax.png", false, true);      // TextureImage19 - snorlax (via UV)
-    LoadTextureImage("../../data/tex_charmeleon.png", false, false);  // TextureImage20 - charmeleon (atlas das 5 texturas do glTF, via UV)
-    LoadTextureImage("../../data/tex_charmander_hd.png", false, false); // TextureImage21 - charmander HD (atlas das texturas do glTF, via UV)
-    LoadTextureImage("../../data/tex_pikachu_hd.png", false, false);    // TextureImage22 - pikachu HD (atlas das texturas do glTF, via UV)
-    LoadTextureImage("../../data/tex_raichu.png", false, false);        // TextureImage23 - raichu (atlas das texturas do glTF, via UV)
+    // Atlas dos modelos de terceiros: NEAREST (sem mipmap). As texturas são
+    // "folhas de expressão" (grades de olhos/bocas) e o filtro linear+mipmap
+    // borraria as células vizinhas, bagunçando o rosto. NEAREST amostra a célula
+    // exata (o modelo é cel-shaded/cor chapada, então fica nítido, não pixelado).
+    // Charmeleon e Raichu têm partes com TRANSPARÊNCIA (ex.: bochechas) -> carrega
+    // com alpha (RGBA) e o shader descarta os fragmentos transparentes.
+    LoadTextureImage("../../data/tex_charmeleon.png", true, false, true); // TextureImage20 - charmeleon (atlas, via UV, com alpha)
+    LoadTextureImage("../../data/tex_charmander_hd.png", true, false); // TextureImage21 - charmander HD (atlas, via UV)
+    LoadTextureImage("../../data/tex_pikachu_hd.png", true, false);    // TextureImage22 - pikachu HD (atlas, via UV)
+    LoadTextureImage("../../data/tex_raichu.png", true, false, true);  // TextureImage23 - raichu (atlas, via UV, com alpha)
+    LoadTextureImage("../../data/tex_snorlax_hd.png", true, false);    // TextureImage24 - snorlax HD (atlas texturas+cores do glTF, via UV)
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel cubemodel("../../data/cube.obj");
@@ -629,6 +636,12 @@ int main(int argc, char* argv[])
     ComputeNormals(&raichumodel);
     BuildTrianglesAndAddToVirtualScene(&raichumodel);
 
+    // Snorlax HD: modelo de EXIBIÇÃO (de terceiros, snorlax_pokemon.glb) usado nas
+    // telas grandes. No mapa/miniatura segue o snorlax simples da dupla.
+    ObjModel snorlaxhdmodel("../../data/snorlax_hd.obj");
+    ComputeNormals(&snorlaxhdmodel);
+    BuildTrianglesAndAddToVirtualScene(&snorlaxhdmodel);
+
     if ( argc > 1 )
     {
         ObjModel model(argv[1]);
@@ -682,6 +695,7 @@ int main(int argc, char* argv[])
     #define CHARMANDER_HD     34
     #define PIKACHU_HD        35
     #define RAICHU            36
+    #define SNORLAX_HD        37
 
     // Tabela de tipos de Pokémon. Centraliza tudo que varia entre um tipo e
     // outro (malha, textura/object_id, miniatura na UI, e os ajustes de
@@ -720,9 +734,10 @@ int main(int argc, char* argv[])
         // captura/detalhe/ginásio. HD é normalizado base-0, altura 1.
         { "Charmander", "Cubo", CHARMANDER, UI_THUMB_2, glm::vec3( 0.0f,  0.0f,  0.0f),  0.28f, -1.5707963f,
           "charmander_hd", CHARMANDER_HD, glm::vec3(0.0f, -0.5f, 0.0f), 0.28f, glm::vec3(0.0f, 0.0f, 0.0f), 0.35f, 0.0f },
-        // 2: Snorlax — sem modelo HD ainda.
+        // 2: Snorlax — malha BASE "snorlax" (da dupla) no mapa e na miniatura; malha
+        // HD "snorlax_hd" (snorlax_pokemon.glb, terceiros) na captura/detalhe/ginásio.
         { "Snorlax",    "snorlax", SNORLAX,  UI_THUMB,   glm::vec3( 0.0f,  0.0f,  0.0f),  0.22f, -1.5707963f,
-          nullptr, 0, glm::vec3(0.0f), 0.0f, glm::vec3(0.0f), 0.0f, 0.0f },
+          "snorlax_hd", SNORLAX_HD, glm::vec3(0.0f, -0.5f, 0.0f), 0.22f, glm::vec3(0.0f, 0.0f, 0.0f), 0.45f, 0.0f },
 
         // --- FORMAS EVOLUÍDAS -------------------------------------------------
         // 3: Raichu (evolução do Pikachu) — modelo real (raichu.obj, textura via
@@ -1405,7 +1420,7 @@ int main(int argc, char* argv[])
             // invertida: desenha os dois lados para não aparecerem buracos.
             bool twoSided = (drawObj == CHARMANDER || drawObj == SNORLAX
                              || drawObj == CHARMANDER_HD || drawObj == CHARMELEON
-                             || drawObj == PIKACHU_HD);
+                             || drawObj == PIKACHU_HD || drawObj == SNORLAX_HD);
             if (twoSided) glDisable(GL_CULL_FACE);
             DrawVirtualObject(drawMesh);
             if (twoSided) glEnable(GL_CULL_FACE);
@@ -2083,21 +2098,24 @@ int main(int argc, char* argv[])
                 glm::vec3   dOff   = useHD ? dt.dispDetailOffset : dt.detailOffset;
                 float       dScale = useHD ? dt.dispDetailScale  : dt.detailScale;
 
-                // Animação de evolução (se este Pokémon está evoluindo): gira mais
-                // rápido, vibra de tamanho e dá um FLASH de luz no meio (pico em u=0.5).
+                // Animação de evolução (se este Pokémon está evoluindo): gira rápido
+                // e ENCOLHE até sumir (1ª metade, ainda a forma antiga); no meio troca
+                // de forma; a forma nova SURGE crescendo (2ª metade). Um FLASH de luz
+                // marca o instante da troca (pico em u=0.5).
                 bool  evolvingThis = (g_EvolvingIndex == g_StorageDetail);
                 float spinSpeed    = evolvingThis ? 9.0f : 1.5f;
                 float spin  = (float) glfwGetTime() * spinSpeed;
-                float pulse = 1.0f;
+                float grow  = 1.0f;
                 if (evolvingThis)
                 {
                     float u = g_EvolveTimer / EVOLVE_DURATION;          // 0..1
-                    pulse   = 1.0f + 0.20f * sinf(g_EvolveTimer * 20.0f); // vibra
+                    // 1ª metade: 1 -> 0 (encolhe);  2ª metade: 0 -> 1 (cresce).
+                    grow = (u < 0.5f) ? (1.0f - u / 0.5f) : ((u - 0.5f) / 0.5f);
                     float flash = 1.0f + 3.5f * expf(-powf((u - 0.5f) * 5.0f, 2.0f));
                     glUniform3f(g_light_tint_uniform, flash, flash, flash); // brilho
                 }
 
-                float dscale = dScale * pulse;
+                float dscale = dScale * grow;
                 model = Matrix_Rotate_Y(spin)
                       * Matrix_Scale(dscale, dscale, dscale)
                       * Matrix_Translate(dOff.x, dOff.y, dOff.z);
@@ -2525,6 +2543,7 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage21"), 21);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage22"), 22);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage23"), 23);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage24"), 24);
     glUseProgram(0);
 }
 

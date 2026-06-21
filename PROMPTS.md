@@ -221,3 +221,51 @@ voa de mim até o Pokémon por Bézier cúbica."
 bloqueia recolocação (rótulo "(gym)" na grade); modal do ginásio ramifica
 (livre→colocar / ocupado→dar fruta), fruta voa do jogador ao Pokémon via
 `EvalCubicBezier`. (`src/main.cpp`)
+
+**26. Captura por clique (não por encostar)**
+Prompt: "Para ir pra captura tem que ser por clique no Pokémon, não por encostar.
+Os Pokémon não bloqueiam mais o jogador (ele atravessa o corpo, que segue exibido);
+só ginásio e pokéstop bloqueiam."
+→ Removido o gatilho por colisão; movimento só checa estruturas; picking em tela
+`g_PokeClickCheck` no Pokémon desenhado → entra na captura. (`src/main.cpp`)
+
+**27. Captura por interseção + ataques por tipo + Snorlax**
+Prompt: "Decida a captura por interseção Pokébola↔Pokémon (a carga vira mira), não
+por sorteio; a Pokébola cai no chão e some quando erra. Os ataques do Charmander têm
+que ser diferentes do Pikachu. Adicione o Snorlax como 3º tipo."
+→ Interseção **esfera-esfera** (`SphereCollision` em `collisions.cpp`, 3º tipo de
+colisão); estado `Missed` (bola cai e encolhe); `g_AttacksByType[3][8]` por tipo;
+Snorlax (`snorlax.obj` + `tex_snorlax.png`, object_id `SNORLAX`). (`src/main.cpp`,
+`src/collisions.h`, `src/collisions.cpp`, `src/shader_fragment.glsl`,
+`data/snorlax.obj`, `data/tex_snorlax.png`)
+
+**28. Evolução (doces por espécie + animação)**
+Prompt: "Implemente evolução estilo Pokémon GO: doces por espécie (cada captura dá
+doces), botão Evoluir na tela de detalhe quando houver doces suficientes (custo 3),
+e uma animação em que o Pokémon gira e encolhe, troca de forma com um flash, e a
+forma evoluída surge crescendo. Pikachu→Raichu e Charmander→Charmeleon."
+→ `g_Candies[]`/`g_CandyFamily[]`/`g_EvolvesTo[]`/`g_EvolveCost[]`; botão no detalhe;
+animação de escala (encolhe→troca+flash→cresce) com `g_EvolvingIndex`/`g_EvolveTimer`.
+(`src/main.cpp`)
+
+**29. Modelos HD reais (modelo duplo) + conversão glTF→atlas+UV**
+Prompt: "No mapa e na miniatura mantenha o modelo simples atual; nos outros lugares
+de exibição (captura/detalhe/ginásio) use modelos melhores que vou subir em data.
+Converta os .glb (FBX/USDZ não dá; GLB/glTF sim) igual ao que foi feito antes, com
+textura real."
+→ Campos de exibição (`dispMesh/dispObjId/dispDetail*/dispCapture*/dispFacing`) em
+`PokemonType` (modelo duplo base/HD). Pipeline trimesh: une as texturas embutidas num
+**atlas** + **remapeia UVs** (encaixe no tile por shift+clamp), carrega com **NEAREST**
+(evita borrar folhas de expressão) e **alpha+discard** onde há transparência; cores
+chapadas viram swatches. Charmander/Pikachu/Snorlax HD. (`src/main.cpp`,
+`src/shader_fragment.glsl`, `data/*_hd.obj`, `data/tex_*_hd.png`)
+
+**30. Evoluções com modelo real (Charmeleon, Raichu) + correções de textura**
+Prompt: "Faça o Charmeleon (evolução do Charmander) e o Raichu (evolução do Pikachu)
+a partir dos .glb. A textura na cara do Raichu está errada e tem placas pretas nas
+bochechas — conserte."
+→ `charmeleon.glb`/`raichu.glb` convertidos (atlas+UV). Rosto "errado" = mipmap
+borrando as folhas de expressão → **NEAREST**; "placas pretas" = bochechas RGBA
+transparentes → atlas RGBA + `discard` no shader. Forma única (sem base/HD),
+object_ids `CHARMELEON`/`RAICHU`. (`src/main.cpp`, `src/shader_fragment.glsl`,
+`data/charmeleon.*`, `data/raichu.*`)

@@ -62,6 +62,7 @@ uniform vec3 light_tint;
 #define CHARMANDER_HD     34
 #define PIKACHU_HD        35
 #define RAICHU            36
+#define SNORLAX_HD        37
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -93,6 +94,7 @@ uniform sampler2D TextureImage20; // charmeleon (atlas das 5 texturas do glTF, v
 uniform sampler2D TextureImage21; // charmander HD (atlas das texturas do glTF, via UV)
 uniform sampler2D TextureImage22; // pikachu HD (atlas das texturas do glTF, via UV)
 uniform sampler2D TextureImage23; // raichu (atlas das texturas do glTF, via UV)
+uniform sampler2D TextureImage24; // snorlax HD (atlas texturas+cores do glTF, via UV)
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -172,8 +174,11 @@ void main()
     else if ( object_id == CHARMELEON )
     {
         // Charmeleon (evolução): textura REAL do glTF, unida num atlas e mapeada
-        // pelas UVs remapeadas do modelo.
-        Kd0 = texture(TextureImage20, texcoords).rgb;
+        // pelas UVs remapeadas do modelo. Partes transparentes (alpha) são
+        // descartadas para não virarem "placas pretas".
+        vec4 t = texture(TextureImage20, texcoords);
+        if ( t.a < 0.5 ) discard;
+        Kd0 = t.rgb;
     }
     else if ( object_id == CHARMANDER_HD )
     {
@@ -187,8 +192,16 @@ void main()
     }
     else if ( object_id == RAICHU )
     {
-        // Raichu (evolução): textura real do glTF (atlas), via UV.
-        Kd0 = texture(TextureImage23, texcoords).rgb;
+        // Raichu (evolução): textura real do glTF (atlas), via UV. As bochechas
+        // têm fundo transparente (alpha) -> descarta para não virar placa preta.
+        vec4 t = texture(TextureImage23, texcoords);
+        if ( t.a < 0.5 ) discard;
+        Kd0 = t.rgb;
+    }
+    else if ( object_id == SNORLAX_HD )
+    {
+        // Snorlax HD (exibição): textura real do glTF (atlas), via UV.
+        Kd0 = texture(TextureImage24, texcoords).rgb;
     }
     else if ( object_id == PLANE )
     {
@@ -357,7 +370,7 @@ void main()
         Ks = vec3(0.0);
         q  = 1.0;
     }
-    else if ( object_id == PIKACHU || object_id == CHARMANDER || object_id == SNORLAX || object_id == CHARMELEON || object_id == CHARMANDER_HD || object_id == PIKACHU_HD || object_id == RAICHU || object_id == POKESTOP || object_id == GYM_TOP || object_id == POKEBALL )
+    else if ( object_id == PIKACHU || object_id == CHARMANDER || object_id == SNORLAX || object_id == CHARMELEON || object_id == CHARMANDER_HD || object_id == PIKACHU_HD || object_id == RAICHU || object_id == SNORLAX_HD || object_id == POKESTOP || object_id == GYM_TOP || object_id == POKEBALL )
     {
         // Pikachu, Charmander, disco do PokéStop, dourado do gym e pokébola: mais "polidos"
         Ks = vec3(0.5);

@@ -30,7 +30,16 @@ glTF por UV. Normalizado (centrado em XZ, base no chao, altura 1). As texturas
 sao de terceiros (do proprio glTF). [TODO: confirmar/colocar aqui a URL/fonte.]
 
 Snorlax (snorlax.obj): modelo feito pela propria dupla (sem fonte externa);
-normalizado (centrado, base no chao, altura 1; UVs preservadas).
+normalizado (centrado, base no chao, altura 1; UVs preservadas). Usado no MAPA e
+na miniatura do armazenamento.
+
+Snorlax HD (snorlax_hd.obj + tex_snorlax_hd.png): modelo de EXIBICAO, usado SO nas
+telas grandes (captura, detalhe, ginasio). Convertido pela dupla de
+snorlax_pokemon.glb (modelo de terceiros, em glTF) para OBJ; as texturas embutidas
+e as cores chapadas dos materiais foram unidas num ATLAS (tex_snorlax_hd.png) e as
+UVs remapeadas (textura REAL do glTF, por UV). Normalizado (centrado XZ, base no
+chao, altura 1). Texturas de terceiros (do proprio glTF). No mapa/miniatura segue o
+snorlax simples da dupla. [TODO: confirmar/colocar aqui a URL/fonte.]
 
 Raichu (raichu.obj + tex_raichu.png): forma evoluida do Pikachu. Convertido pela
 dupla de raichu.glb (modelo de terceiros, em glTF) para OBJ; texturas embutidas
