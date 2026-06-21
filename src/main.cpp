@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 
 // Headers abaixo são específicos de C++
@@ -249,26 +250,61 @@ GameScene g_CurrentScene = GameScene::World;
 int g_CaptureTargetIndex = -1;
 
 // --- Mecânica de captura (mira -> arremesso -> resultado) ---
-enum class CaptureState { Aiming, Throwing, Caught };
+enum class CaptureState { Aiming, Throwing, Caught, Missed };
 CaptureState g_CaptureState = CaptureState::Aiming;
 float g_CaptureCharge  = 0.0f;  // 0..1, carrega segurando L
 float g_CaptureThrowT  = 0.0f;  // 0..1, progresso do arremesso (Bézier)
 float g_CaptureChance  = 0.0f;  // chance definida no momento do arremesso
 float g_CaughtTimer    = 0.0f;  // tempo da animação de captura bem-sucedida
+float g_MissTimer      = 0.0f;  // tempo da animação de erro (bola cai e some)
 int   g_CaptureCP      = 0;     // CP do Pokémon selvagem (sorteado ao iniciar a captura)
 glm::vec3 g_ThrowP0, g_ThrowP1, g_ThrowP2, g_ThrowP3; // pontos da Bézier do arremesso
 bool g_KeyL = false;            // tecla L (carregar a captura)
 
 // --- Armazenamento de Pokémons (interface 2D) ---
 // Cada Pokémon capturado guarda seus atributos (HP, CP e dois ataques).
-struct CapturedPokemon { int type; int hp; int cp; int atk1; int atk2; };
+struct CapturedPokemon { int type; int hp; int cp; int atk1; int atk2; int placedGym = -1; };
 std::vector<CapturedPokemon> g_Captured;        // lista de capturados (máx. 100)
 
-const char* g_AttackNames[] = {
-    "Choque do Trovao", "Investida", "Cauda de Ferro", "Raio Solar",
-    "Ataque Rapido", "Bola Eletrica", "Trovao", "Agilidade"
-};
+// Ataques por TIPO de Pokémon (índice = pokeType: 0 = Pikachu, 1 = Charmander).
 const int g_NumAttacks = 8;
+const char* g_AttacksByType[3][g_NumAttacks] = {
+    // Pikachu (elétrico)
+    { "Choque do Trovao", "Investida", "Cauda de Ferro", "Raio Solar",
+      "Ataque Rapido", "Bola Eletrica", "Trovao", "Agilidade" },
+    // Charmander (fogo)
+    { "Brasa", "Lanca-chamas", "Garra de Fogo", "Giro de Fogo",
+      "Ataque Rapido", "Presas de Fogo", "Sopro de Fogo", "Roda de Fogo" },
+    // Snorlax (normal)
+    { "Investida", "Corpo Pesado", "Bocejo", "Lambida",
+      "Soco", "Descanso", "Bloqueio", "Esmagar" },
+};
+
+// --- Evolução (estilo Pokémon GO: doces por espécie) ---------------------
+// Tabelas paralelas indexadas pelo "tipo" do Pokémon (mesmo índice de
+// g_PokeTypes). Ficam em escopo de arquivo para que o MouseButtonCallback
+// também consiga consultá-las.
+//   índices: 0=Pikachu 1=Charmander 2=Snorlax 3=Raichu 4=Charmeleon
+const int g_EvolvesTo[5]   = {  3,  4, -1, -1, -1 }; // tipo destino (-1 = não evolui)
+const int g_EvolveCost[5]  = { 12, 12,  0,  0,  0 }; // doces necessários
+const int g_CandyFamily[5] = {  0,  1,  2,  0,  1 }; // família de doces (forma base)
+
+// Doces acumulados por família (0=Pikachu, 1=Charmander, 2=Snorlax). Cada
+// captura rende doces da família do Pokémon capturado.
+int g_Candies[3] = { 0, 0, 0 };
+const int CANDY_PER_CATCH = 3;
+
+// Estado da animação de evolução (toca na tela de detalhe do armazenamento).
+int   g_EvolvingIndex = -1;     // índice em g_Captured do Pokémon evoluindo (-1 = nenhum)
+float g_EvolveTimer   = 0.0f;   // tempo decorrido da animação
+int   g_EvolveToType  = -1;     // tipo destino da forma evoluída
+bool  g_EvolveSwapped = false;  // já trocou a forma (no meio da animação)?
+const float EVOLVE_DURATION = 2.6f; // duração total da animação (s)
+
+// Botão "Evoluir" na tela de detalhe (coordenadas NDC). Usado tanto no desenho
+// quanto no teste de clique (MouseButtonCallback), para casarem exatamente.
+const float EVO_BTN_CX = 0.40f, EVO_BTN_CY = -0.58f;
+const float EVO_BTN_HW = 0.22f, EVO_BTN_HH = 0.075f;
 
 int  g_CapturedCount    = 0;     // == g_Captured.size() (atalho)
 bool g_StorageOpen      = false; // janela de armazenamento aberta?
@@ -337,6 +373,7 @@ bool g_GymModalOpen    = false;
 int  g_GymModalIndex   = -1;    // ginásio sendo perguntado
 int  g_PlacingGymIndex = -1;    // armazenamento aberto em modo "colocar no ginásio"
 bool g_GymClickCheck   = false; // pedido de teste de clique num ginásio (feito no loop)
+bool g_PokeClickCheck  = false; // pedido de teste de clique num Pokémon (entra na captura)
 
 // Inventário do jogador
 int g_NumPokeballs = 0;
@@ -473,6 +510,11 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/valor.png",    false, false, true); // TextureImage16 - logo Valor (vermelho)
     LoadTextureImage("../../data/mystic.png",   false, false, true); // TextureImage17 - logo Mystic (azul)
     LoadTextureImage("../../data/instinct.png", false, false, true); // TextureImage18 - logo Instinct (amarelo)
+    LoadTextureImage("../../data/tex_snorlax.png", false, true);      // TextureImage19 - snorlax (via UV)
+    LoadTextureImage("../../data/tex_charmeleon.png", false, false);  // TextureImage20 - charmeleon (atlas das 5 texturas do glTF, via UV)
+    LoadTextureImage("../../data/tex_charmander_hd.png", false, false); // TextureImage21 - charmander HD (atlas das texturas do glTF, via UV)
+    LoadTextureImage("../../data/tex_pikachu_hd.png", false, false);    // TextureImage22 - pikachu HD (atlas das texturas do glTF, via UV)
+    LoadTextureImage("../../data/tex_raichu.png", false, false);        // TextureImage23 - raichu (atlas das texturas do glTF, via UV)
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel cubemodel("../../data/cube.obj");
@@ -555,6 +597,38 @@ int main(int argc, char* argv[])
     ComputeNormals(&charmandermodel);
     BuildTrianglesAndAddToVirtualScene(&charmandermodel);
 
+    // Snorlax: 3º tipo de Pokémon (modelo feito pela dupla; shape "snorlax",
+    // normalizado: centrado, base no chão, altura 1; possui UVs).
+    ObjModel snorlaxmodel("../../data/snorlax.obj");
+    ComputeNormals(&snorlaxmodel);
+    BuildTrianglesAndAddToVirtualScene(&snorlaxmodel);
+
+    // Charmeleon: forma EVOLUÍDA do Charmander. Convertido de charmeleon.glb
+    // (pacote de terceiros) para OBJ com COR-POR-VÉRTICE assada da textura do
+    // glTF; normalizado (centrado XZ, base y=0, altura 1). Shape "charmeleon".
+    ObjModel charmeleonmodel("../../data/charmeleon.obj");
+    ComputeNormals(&charmeleonmodel);
+    BuildTrianglesAndAddToVirtualScene(&charmeleonmodel);
+
+    // Charmander HD: modelo de EXIBIÇÃO (de terceiros, charmander.glb) usado nas
+    // telas grandes (captura/detalhe/ginásio). No mapa e na miniatura segue o
+    // modelo simples da dupla (charmander.obj). Textura real via atlas+UV.
+    ObjModel charmanderhdmodel("../../data/charmander_hd.obj");
+    ComputeNormals(&charmanderhdmodel);
+    BuildTrianglesAndAddToVirtualScene(&charmanderhdmodel);
+
+    // Pikachu HD: modelo de EXIBIÇÃO (de terceiros, 025_pikachu.glb) usado nas
+    // telas grandes. No mapa/miniatura segue o modelo simples da dupla.
+    ObjModel pikachuhdmodel("../../data/pikachu_hd.obj");
+    ComputeNormals(&pikachuhdmodel);
+    BuildTrianglesAndAddToVirtualScene(&pikachuhdmodel);
+
+    // Raichu: forma EVOLUÍDA do Pikachu (de terceiros, raichu.glb). Modelo único
+    // (sem distinção base/HD); textura real via atlas+UV.
+    ObjModel raichumodel("../../data/raichu.obj");
+    ComputeNormals(&raichumodel);
+    BuildTrianglesAndAddToVirtualScene(&raichumodel);
+
     if ( argc > 1 )
     {
         ObjModel model(argv[1]);
@@ -603,6 +677,11 @@ int main(int argc, char* argv[])
     #define UI_LOGO_VALOR     29
     #define UI_LOGO_MYSTIC    30
     #define UI_LOGO_INSTINCT  31
+    #define SNORLAX           32
+    #define CHARMELEON        33
+    #define CHARMANDER_HD     34
+    #define PIKACHU_HD        35
+    #define RAICHU            36
 
     // Tabela de tipos de Pokémon. Centraliza tudo que varia entre um tipo e
     // outro (malha, textura/object_id, miniatura na UI, e os ajustes de
@@ -611,22 +690,50 @@ int main(int argc, char* argv[])
     struct PokemonType
     {
         const char* name;        // "Pikachu", "Charmander"
-        const char* mesh;        // nome da malha (DrawVirtualObject)
-        int   modelObjId;        // object_id que texturiza o modelo 3D
+        const char* mesh;        // malha BASE (mapa + miniatura do armazenamento)
+        int   modelObjId;        // object_id que texturiza a malha base
         int   thumbObjId;        // object_id que texturiza a miniatura (UI)
         glm::vec3 detailOffset;  // offset do modelo na tela de detalhe
         float detailScale;       // escala do modelo na tela de detalhe
         float facingOffset;      // ajuste de yaw para encarar a câmera na captura
+
+        // --- Modelo de EXIBIÇÃO (HD) ---
+        // Usado SÓ nas telas grandes: captura, detalhe do armazenamento e o
+        // Pokémon flutuando no ginásio. No mapa e na miniatura usa-se a malha
+        // base acima. dispMesh == nullptr => não há HD, cai na malha base.
+        const char* dispMesh;        // malha HD (ou nullptr)
+        int   dispObjId;             // object_id da malha HD
+        glm::vec3 dispDetailOffset;  // offset no detalhe/ginásio (HD)
+        float dispDetailScale;       // escala no detalhe/ginásio (HD)
+        glm::vec3 dispCaptureOffset; // offset na captura (HD)
+        float dispCaptureScale;      // escala na captura (HD)
+        float dispFacing;            // yaw para encarar a câmera (HD)
     };
     const PokemonType g_PokeTypes[] = {
-        // 0: Pikachu (pikachu_final.obj, malha "Cube")
-        // detailScale menor que no mapa: o Pikachu é largo (braços/cauda) e varre
-        // um círculo grande ao girar, então reduzimos para caber no painel.
-        { "Pikachu",    "Cube", PIKACHU,    UI_THUMB,   glm::vec3(-0.82f, 0.0f, -0.06f), 0.105f, -1.5707963f },
-        // 1: Charmander (charmander.obj normalizado: centrado, altura 1, malha "Cubo").
-        // detailScale menor que a do mapa: o rabo/braços varrem um círculo largo ao
-        // girar, então mantemos a escala de exibição menor para caber no painel.
-        { "Charmander", "Cubo", CHARMANDER, UI_THUMB_2, glm::vec3( 0.0f,  0.0f,  0.0f),  0.28f, -1.5707963f },
+        // 0: Pikachu — malha BASE "Cube" (pikachu_final.obj, da dupla) no mapa e na
+        // miniatura; malha HD "pikachu_hd" (025_pikachu.glb, terceiros) na
+        // captura/detalhe/ginásio. HD normalizado base-0, altura 1.
+        { "Pikachu",    "Cube", PIKACHU,    UI_THUMB,   glm::vec3(-0.82f, 0.0f, -0.06f), 0.105f, -1.5707963f,
+          "pikachu_hd", PIKACHU_HD, glm::vec3(0.0f, -0.5f, 0.0f), 0.28f, glm::vec3(0.0f, 0.0f, 0.0f), 0.35f, 0.0f },
+        // 1: Charmander — malha BASE "Cubo" (charmander.obj, da dupla) no mapa e na
+        // miniatura; malha HD "charmander_hd" (charmander.glb, terceiros) na
+        // captura/detalhe/ginásio. HD é normalizado base-0, altura 1.
+        { "Charmander", "Cubo", CHARMANDER, UI_THUMB_2, glm::vec3( 0.0f,  0.0f,  0.0f),  0.28f, -1.5707963f,
+          "charmander_hd", CHARMANDER_HD, glm::vec3(0.0f, -0.5f, 0.0f), 0.28f, glm::vec3(0.0f, 0.0f, 0.0f), 0.35f, 0.0f },
+        // 2: Snorlax — sem modelo HD ainda.
+        { "Snorlax",    "snorlax", SNORLAX,  UI_THUMB,   glm::vec3( 0.0f,  0.0f,  0.0f),  0.22f, -1.5707963f,
+          nullptr, 0, glm::vec3(0.0f), 0.0f, glm::vec3(0.0f), 0.0f, 0.0f },
+
+        // --- FORMAS EVOLUÍDAS -------------------------------------------------
+        // 3: Raichu (evolução do Pikachu) — modelo real (raichu.obj, textura via
+        // atlas+UV; shape "raichu", altura 1). Forma única (sem base/HD). A cauda
+        // é comprida, então detailScale menor para caber girando no painel.
+        { "Raichu",     "raichu", RAICHU,   UI_THUMB,   glm::vec3( 0.0f, -0.5f, 0.0f), 0.18f, 0.0f,
+          nullptr, 0, glm::vec3(0.0f), 0.0f, glm::vec3(0.0f), 0.0f, 0.0f },
+        // 4: Charmeleon (evolução do Charmander) — modelo real (charmeleon.obj,
+        // textura real via atlas+UV). Forma única (sem distinção base/HD).
+        { "Charmeleon", "charmeleon", CHARMELEON, UI_THUMB_2, glm::vec3( 0.0f, -0.5f, 0.0f), 0.30f, -1.5707963f,
+          nullptr, 0, glm::vec3(0.0f), 0.0f, glm::vec3(0.0f), 0.0f, 0.0f },
     };
 
     // Configuração dos objetos da cena (feita uma única vez, fora do loop)
@@ -690,6 +797,22 @@ int main(int argc, char* argv[])
             charmander.appearRadius = 1.2f;
             charmander.pokeType = 1;     // tipo 1 = Charmander (ver g_PokeTypes)
             g_Entities.push_back(charmander);
+        }
+
+        // Snorlax (terceiro tipo): grande e mais raro (4 no mapa). Mesmo
+        // comportamento de aparecer/sumir e captura por colisão.
+        for (int i = 0; i < 4; ++i)
+        {
+            SceneEntity snorlax;
+            snorlax.mesh = "snorlax";
+            snorlax.position = randomSpot(-1.1f);
+            snorlax.scale = glm::vec3(0.45f);            // maior que os outros
+            snorlax.localOffset = glm::vec3(0.0f, 0.5f, 0.0f); // base no chão
+            snorlax.object_id = SNORLAX;
+            snorlax.collidable = true;
+            snorlax.appearRadius = 1.2f;
+            snorlax.pokeType = 2;        // tipo 2 = Snorlax (ver g_PokeTypes)
+            g_Entities.push_back(snorlax);
         }
 
         SceneEntity plane;
@@ -818,13 +941,11 @@ int main(int argc, char* argv[])
             if (fabs(moveDirX) > 1e-5f || fabs(moveDirZ) > 1e-5f)
                 g_PlayerAngleY = atan2(moveDirX, moveDirZ);
 
-            // Colisão com as entidades (Pokémon): bloqueia o passo e, ao encostar
-            // num Pokémon, entra na captura (o corpo dele é exibido na cena).
+            // Os Pokémon NÃO bloqueiam o jogador e NÃO entram na captura ao
+            // encostar — o jogador atravessa o corpo deles (que segue exibido no
+            // mapa). A captura agora é iniciada por CLIQUE no Pokémon (testado no
+            // loop de desenho, junto da projeção para a tela).
             float playerHalfSize = 0.075f;
-            int collidingEntityIndex = FindCollidingEntityIndex(
-                nextPlayerX,
-                nextPlayerZ,
-                playerHalfSize);
 
             // Bloqueio por ESTRUTURAS sólidas (ginásios e PokéStops): a prioridade
             // é o jogador — ele não as atravessa, simplesmente não anda. Usa
@@ -848,26 +969,12 @@ int main(int argc, char* argv[])
                 }
             }
 
-            if (collidingEntityIndex == -1 && !blockedByStructure)
+            if (!blockedByStructure)
             {
                 g_PlayerX = nextPlayerX;
                 g_PlayerZ = nextPlayerZ;
             }
-            else if (collidingEntityIndex != -1)
-            {
-                const SceneEntity& collidingEntity = g_Entities[collidingEntityIndex];
-                if (collidingEntity.pokeType >= 0)
-                {
-                    g_CurrentScene = GameScene::Capture;
-                    g_CaptureTargetIndex = collidingEntityIndex;
-                    // reinicia a mecânica de captura
-                    g_CaptureState  = CaptureState::Aiming;
-                    g_CaptureCharge = 0.0f;
-                    g_CaptureThrowT = 0.0f;
-                    g_CaptureCP     = rand() % 201; // CP do selvagem (mostrado na cena)
-                }
-            }
-            // (Se só houve bloqueio por estrutura, o jogador simplesmente não anda.)
+            // (Se houve bloqueio por estrutura, o jogador simplesmente não anda.)
         }
 
         if (g_CurrentScene == GameScene::Capture
@@ -889,6 +996,19 @@ int main(int argc, char* argv[])
             float tl = sqrtf(toT.x*toT.x + toT.y*toT.y + toT.z*toT.z);
             glm::vec3 held = capCam + (toT / tl) * 0.45f + glm::vec3(0.0f, -0.18f, 0.0f);
 
+            // Esfera de colisão do Pokémon para o TESTE DE INTERSEÇÃO da captura:
+            // centro = tc; raio ~ metade da maior dimensão do modelo (já com escala).
+            // Usa o modelo de EXIBIÇÃO (HD) quando existe — é o que está na tela.
+            const PokemonType& tgtType = g_PokeTypes[tgt.pokeType >= 0 ? tgt.pokeType : 0];
+            bool        tgtHD    = (tgt.pokeType >= 0 && tgtType.dispMesh != nullptr);
+            const char* tMeshN   = tgtHD ? tgtType.dispMesh : tgt.mesh.c_str();
+            float       tScaleU  = tgtHD ? tgtType.dispCaptureScale : tgt.scale.x;
+            SceneObject& tmesh = g_VirtualScene[tMeshN];
+            float tW = (tmesh.bbox_max.x - tmesh.bbox_min.x) * tScaleU;
+            float tH = (tmesh.bbox_max.y - tmesh.bbox_min.y) * tScaleU;
+            float tD = (tmesh.bbox_max.z - tmesh.bbox_min.z) * tScaleU;
+            float pokeR = std::max(std::max(tW, tD), tH) * 0.5f;
+
             if (g_CaptureState == CaptureState::Aiming)
             {
                 if (g_NumPokeballs <= 0)
@@ -904,15 +1024,18 @@ int main(int argc, char* argv[])
                 }
                 else if (g_CaptureCharge > 0.0f)
                 {
-                    // soltou L -> lança. Gasta uma Pokébola. Chance = max(25%, carga).
+                    // soltou L -> lança. Gasta uma Pokébola. A carga é a MIRA: quanto
+                    // mais cheia, menor o erro (o destino fica mais perto do centro do
+                    // Pokémon). O acerto é decidido por interseção (abaixo), não por sorte.
                     g_NumPokeballs--;
-                    g_CaptureChance = (g_CaptureCharge > 0.25f) ? g_CaptureCharge : 0.25f;
+                    float missMag = (1.0f - g_CaptureCharge) * 0.55f * ((float)rand()/RAND_MAX);
+                    float ang     = ((float)rand()/RAND_MAX) * 6.2831853f;
+                    // Erro no plano perpendicular ao arremesso (a câmera olha em -X,
+                    // então o desvio é em Y/Z: cima/baixo/lados).
+                    glm::vec3 aimErr = glm::vec3(0.0f, sinf(ang), cosf(ang)) * missMag;
+
                     g_ThrowP0 = held;
-                    // A bola deve parar NA FRENTE do Pokémon (lado da câmera), e não
-                    // no centro dele — senão as faces frontais a escondem e parece
-                    // que a bola foi "para trás" do Pokémon.
-                    glm::vec3 frontDir = (capCam - tc) / tl; // do Pokémon em direção à câmera
-                    g_ThrowP3 = tc + frontDir * 0.25f;
+                    g_ThrowP3 = tc + aimErr; // destino = corpo do Pokémon + erro de mira
                     glm::vec3 d = g_ThrowP3 - g_ThrowP0;
                     g_ThrowP1 = g_ThrowP0 + d * 0.33f + glm::vec3(0.0f, 0.5f, 0.0f);
                     g_ThrowP2 = g_ThrowP0 + d * 0.66f + glm::vec3(0.0f, 0.5f, 0.0f);
@@ -926,17 +1049,31 @@ int main(int argc, char* argv[])
                 if (g_CaptureThrowT >= 1.0f)
                 {
                     g_CaptureThrowT = 1.0f;
-                    float r = (float) rand() / (float) RAND_MAX;
-                    if (r < g_CaptureChance)
+                    // TESTE DE INTERSEÇÃO Pokébola x Pokémon: a bola acerta se a
+                    // esfera dela (centro g_ThrowP3, raio ballR) intersecta a esfera
+                    // do Pokémon (centro tc, raio pokeR). Decide a captura. O teste
+                    // em si (esfera-esfera) está em collisions.cpp.
+                    const float ballR = 0.04f;
+                    if (SphereCollision(g_ThrowP3, ballR, tc, pokeR))
                     {
-                        g_CaptureState = CaptureState::Caught; // capturou!
+                        g_CaptureState = CaptureState::Caught; // acertou -> capturou!
                         g_CaughtTimer  = 0.0f;
                     }
                     else
                     {
-                        g_CaptureState  = CaptureState::Aiming; // falhou: bola reaparece
-                        g_CaptureCharge = 0.0f;
+                        g_CaptureState = CaptureState::Missed; // errou: bola cai e some
+                        g_MissTimer    = 0.0f;
                     }
+                }
+            }
+            else if (g_CaptureState == CaptureState::Missed)
+            {
+                // Bola errou: cai no chão e encolhe; depois volta para a mira.
+                g_MissTimer += delta_t;
+                if (g_MissTimer > 0.7f)
+                {
+                    g_CaptureState  = CaptureState::Aiming; // pronto p/ nova tentativa
+                    g_CaptureCharge = 0.0f;
                 }
             }
             else // Caught
@@ -960,6 +1097,11 @@ int main(int argc, char* argv[])
                         if (p.atk2 == p.atk1) p.atk2 = (p.atk2 + 1) % g_NumAttacks; // dois ataques diferentes
                         g_Captured.push_back(p);
                         g_CapturedCount = (int) g_Captured.size();
+
+                        // Doces da espécie (estilo Pokémon GO): cada captura rende
+                        // CANDY_PER_CATCH doces da família, usados para evoluir.
+                        if (type >= 0 && type < 5)
+                            g_Candies[g_CandyFamily[type]] += CANDY_PER_CATCH;
                     }
                     g_Entities[g_CaptureTargetIndex].collidable = false;
                     g_Entities[g_CaptureTargetIndex].position.y = -100.0f;
@@ -973,6 +1115,30 @@ int main(int argc, char* argv[])
                         g_StorageDetail = g_CapturedCount - 1;
                     }
                 }
+            }
+        }
+
+        // ---- Animação de evolução (doces -> nova forma) ----------------------
+        // Avança o tempo; na METADE da animação troca a forma e melhora os
+        // atributos; ao terminar, encerra. O desenho (vibração + flash) é feito
+        // na tela de detalhe do armazenamento.
+        if (g_EvolvingIndex >= 0 && g_EvolvingIndex < (int)g_Captured.size())
+        {
+            g_EvolveTimer += delta_t;
+            if (!g_EvolveSwapped && g_EvolveTimer >= EVOLVE_DURATION * 0.5f)
+            {
+                CapturedPokemon& ep = g_Captured[g_EvolvingIndex];
+                ep.type = g_EvolveToType;                    // vira a forma evoluída
+                ep.cp   = std::min(200, ep.cp + 60);         // mais forte
+                ep.hp   = std::min(200, ep.hp + 40);
+                g_EvolveSwapped = true;
+            }
+            if (g_EvolveTimer >= EVOLVE_DURATION)
+            {
+                g_EvolvingIndex = -1;
+                g_EvolveToType  = -1;
+                g_EvolveTimer   = 0.0f;
+                g_EvolveSwapped = false;
             }
         }
 
@@ -1186,6 +1352,28 @@ int main(int argc, char* argv[])
             if (obj.pokeType >= 0 && g_CurrentScene != GameScene::Capture)
                 bobY = (sinf((float)glfwGetTime() * 2.0f + (float)i) * 0.5f + 0.5f) * 0.06f;
 
+            // Na CAPTURA (tela grande), o Pokémon alvo é desenhado com o modelo de
+            // EXIBIÇÃO (HD) quando existe — no mapa segue o modelo base.
+            bool isCaptureTarget = (g_CurrentScene == GameScene::Capture
+                                    && g_CaptureTargetIndex == static_cast<int>(i)
+                                    && obj.pokeType >= 0);
+            bool useHDhere = isCaptureTarget && (g_PokeTypes[obj.pokeType].dispMesh != nullptr);
+
+            const char* drawMesh  = obj.mesh.c_str();
+            int         drawObj   = obj.object_id;
+            glm::vec3   drawScale = obj.scale;
+            glm::vec3   drawOff   = obj.localOffset;
+            float       facing    = (obj.pokeType >= 0) ? g_PokeTypes[obj.pokeType].facingOffset : 0.0f;
+            if (useHDhere)
+            {
+                const PokemonType& pt = g_PokeTypes[obj.pokeType];
+                drawMesh  = pt.dispMesh;
+                drawObj   = pt.dispObjId;
+                drawScale = glm::vec3(pt.dispCaptureScale);
+                drawOff   = pt.dispCaptureOffset;
+                facing    = pt.dispFacing;
+            }
+
             model =
                 Matrix_Translate(
                     obj.position.x,
@@ -1193,22 +1381,17 @@ int main(int argc, char* argv[])
                     obj.position.z)
                 *
                 (
-                    (g_CurrentScene == GameScene::Capture
-                     && g_CaptureTargetIndex == static_cast<int>(i)
-                     && obj.pokeType >= 0)
-                    ? Matrix_Rotate_Y(captureFacingAngle + g_PokeTypes[obj.pokeType].facingOffset) // gira o Pokémon para encarar a câmera
+                    isCaptureTarget
+                    ? Matrix_Rotate_Y(captureFacingAngle + facing) // gira o Pokémon para encarar a câmera
                     : Matrix_Identity()
                 )
                 *
                 Matrix_Scale(
-                    obj.scale.x * appearScale,
-                    obj.scale.y * appearScale,
-                    obj.scale.z * appearScale)
+                    drawScale.x * appearScale,
+                    drawScale.y * appearScale,
+                    drawScale.z * appearScale)
                 *
-                Matrix_Translate(
-                    obj.localOffset.x,
-                    obj.localOffset.y,
-                    obj.localOffset.z);
+                Matrix_Translate(drawOff.x, drawOff.y, drawOff.z);
 
             glUniformMatrix4fv(
                 g_model_uniform,
@@ -1216,16 +1399,57 @@ int main(int argc, char* argv[])
                 GL_FALSE,
                 glm::value_ptr(model));
 
-            glUniform1i(
-                g_object_id_uniform,
-                obj.object_id);
+            glUniform1i(g_object_id_uniform, drawObj);
 
-            // Charmander tem faces com orientação invertida (rabo): desenha os
-            // dois lados para não aparecerem buracos no mapa/captura.
-            if (obj.object_id == CHARMANDER) glDisable(GL_CULL_FACE);
-            DrawVirtualObject(obj.mesh.c_str());
-            if (obj.object_id == CHARMANDER) glEnable(GL_CULL_FACE);
+            // Charmander/Snorlax (e os modelos HD) podem ter faces com orientação
+            // invertida: desenha os dois lados para não aparecerem buracos.
+            bool twoSided = (drawObj == CHARMANDER || drawObj == SNORLAX
+                             || drawObj == CHARMANDER_HD || drawObj == CHARMELEON
+                             || drawObj == PIKACHU_HD);
+            if (twoSided) glDisable(GL_CULL_FACE);
+            DrawVirtualObject(drawMesh);
+            if (twoSided) glEnable(GL_CULL_FACE);
+
+            // ---- Clique no Pokémon -> abre a cena de captura --------------------
+            // Só os Pokémon DESENHADOS (logo, perto o bastante para aparecer)
+            // chegam aqui, então clicar neles equivale a interagir de perto.
+            if (g_PokeClickCheck && g_CurrentScene == GameScene::World && obj.pokeType >= 0)
+            {
+                int ww = 0, wh = 0;
+                glfwGetWindowSize(window, &ww, &wh);
+
+                // Projeta o centro do corpo do Pokémon para coordenadas de tela.
+                float ccy  = obj.position.y + bobY + 0.20f;
+                glm::vec4 clip = projection * view * glm::vec4(obj.position.x, ccy, obj.position.z, 1.0f);
+                if (clip.w > 0.0f)
+                {
+                    glm::vec3 ndc = glm::vec3(clip) / clip.w;
+                    float sx = (ndc.x*0.5f + 0.5f) * ww;
+                    float sy = (1.0f - (ndc.y*0.5f + 0.5f)) * wh;
+
+                    // Raio de acerto = tamanho projetado (centro -> topo) do corpo.
+                    glm::vec4 clipTop = projection * view * glm::vec4(obj.position.x, ccy + 0.40f, obj.position.z, 1.0f);
+                    glm::vec3 ndcTop  = glm::vec3(clipTop) / clipTop.w;
+                    float syTop = (1.0f - (ndcTop.y*0.5f + 0.5f)) * wh;
+                    float hitR  = fabs(sy - syTop) + 16.0f;
+
+                    float ddx = (float)g_ClickPosX - sx;
+                    float ddy = (float)g_ClickPosY - sy;
+                    if (ddx*ddx + ddy*ddy < hitR*hitR)
+                    {
+                        g_CurrentScene       = GameScene::Capture;
+                        g_CaptureTargetIndex = static_cast<int>(i);
+                        // reinicia a mecânica de captura
+                        g_CaptureState  = CaptureState::Aiming;
+                        g_CaptureCharge = 0.0f;
+                        g_CaptureThrowT = 0.0f;
+                        g_CaptureCP     = rand() % 201; // CP do selvagem (mostrado na cena)
+                        g_PokeClickCheck = false;       // consome o clique
+                    }
+                }
+            }
         }
+        g_PokeClickCheck = false; // consumimos o clique deste frame (haja acerto ou não)
 
         // Painéis verticais de floresta nos 4 lados — dão sensação de 3D.
         // Todos com a MESMA orientação: o plano (deitado) é levantado por
@@ -1458,10 +1682,37 @@ int main(int argc, char* argv[])
                 DrawVirtualObject(gymMesh);
                 glEnable(GL_CULL_FACE);
 
-                // Picking: só interage se o jogador estiver perto (modelo montado)
-                // e o ginásio estiver livre. Projeta o centro para a tela e
-                // compara com a posição do clique.
-                if (g_GymClickCheck && gym.team == Team::None && nearGym)
+                // Se há um Pokémon defendendo o ginásio, ele aparece FLUTUANDO
+                // acima do topo, girando devagar e com um leve sobe-e-desce — assim
+                // dá pra ver qual Pokémon está no ginásio.
+                if (gym.pokemonType >= 0)
+                {
+                    const PokemonType& dt = g_PokeTypes[gym.pokemonType];
+                    // Tela grande => modelo de EXIBIÇÃO (HD) quando existe.
+                    bool        gUseHD = (dt.dispMesh != nullptr);
+                    const char* gMesh  = gUseHD ? dt.dispMesh        : dt.mesh;
+                    int         gObj   = gUseHD ? dt.dispObjId        : dt.modelObjId;
+                    glm::vec3   gOff   = gUseHD ? dt.dispDetailOffset : dt.detailOffset;
+                    float       gScale = gUseHD ? dt.dispDetailScale  : dt.detailScale;
+
+                    float gspin = (float)glfwGetTime() * 1.0f;
+                    float gbob  = sinf((float)glfwGetTime() * 2.0f + (float)gi) * 0.05f;
+                    float gy    = gym.position.y + GYM_SIZE + 0.35f + gbob; // acima do ginásio
+
+                    model = Matrix_Translate(gym.position.x, gy, gym.position.z)
+                          * Matrix_Rotate_Y(gspin)
+                          * Matrix_Scale(gScale, gScale, gScale)
+                          * Matrix_Translate(gOff.x, gOff.y, gOff.z);
+                    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                    glUniform1i(g_object_id_uniform, gObj);
+                    glDisable(GL_CULL_FACE); // alguns modelos têm faces invertidas
+                    DrawVirtualObject(gMesh);
+                    glEnable(GL_CULL_FACE);
+                }
+
+                // Picking: interage ao clicar de perto. Ginásio livre -> modal de
+                // deixar Pokémon; ginásio ocupado -> modal de dar fruta.
+                if (g_GymClickCheck && nearGym)
                 {
                     float cy = gym.position.y + GYM_SIZE * 0.5f;
                     glm::vec4 clip = projection * view * glm::vec4(gym.position.x, cy, gym.position.z, 1.0f);
@@ -1504,16 +1755,27 @@ int main(int argc, char* argv[])
             float tl = sqrtf(toT.x*toT.x + toT.y*toT.y + toT.z*toT.z);
             glm::vec3 held = capCam + (toT / tl) * 0.45f + glm::vec3(0.0f, -0.18f, 0.0f);
 
-            glm::vec3 ballPos = held; // mira: bola "na mão"
+            glm::vec3 ballPos   = held; // mira: bola "na mão"
+            float     ballScale = 0.03f;
             if (g_CaptureState == CaptureState::Throwing)
                 ballPos = EvalCubicBezier(g_ThrowP0, g_ThrowP1, g_ThrowP2, g_ThrowP3, g_CaptureThrowT);
             else if (g_CaptureState == CaptureState::Caught)
                 ballPos = tc + (toT / -tl) * 0.25f; // na frente do Pokémon (mesmo ponto do arremesso)
+            else if (g_CaptureState == CaptureState::Missed)
+            {
+                // Errou: a bola cai (gravidade) de onde errou até o chão e encolhe
+                // até sumir, antes de voltar para a mira.
+                float groundY = tgt.position.y; // base do Pokémon = nível do chão
+                float y = g_ThrowP3.y - 0.5f * 5.0f * g_MissTimer * g_MissTimer; // queda acelerada
+                if (y < groundY) y = groundY;
+                ballPos   = glm::vec3(g_ThrowP3.x, y, g_ThrowP3.z);
+                ballScale = 0.03f * std::max(0.0f, 1.0f - g_MissTimer / 0.7f);
+            }
 
             float spin = (float) glfwGetTime() * 5.0f;
             model = Matrix_Translate(ballPos.x, ballPos.y, ballPos.z)
                   * Matrix_Rotate_Y(spin)
-                  * Matrix_Scale(0.03f, 0.03f, 0.03f); // bem menor que o Pokémon
+                  * Matrix_Scale(ballScale, ballScale, ballScale); // bem menor que o Pokémon
             glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
             glUniform1i(g_object_id_uniform, POKEBALL);
             DrawVirtualObject("Esfera_UV");
@@ -1654,30 +1916,26 @@ int main(int argc, char* argv[])
                     int filled = (int)(g_CaptureCharge * 20.0f);
                     if (filled > 20) filled = 20;
                     std::string bar = "[" + std::string(filled, '#') + std::string(20 - filled, '-') + "]";
-                    float chance = (g_CaptureCharge > 0.25f ? g_CaptureCharge : 0.25f) * 100.0f;
 
                     char buf[160];
-                    snprintf(buf, sizeof(buf), "Captura: %s  %d%%", bar.c_str(), (int)chance);
+                    snprintf(buf, sizeof(buf), "Mira: %s", bar.c_str());
                     TextRendering_PrintString(window, buf, -0.45f, -0.80f, 1.2f);
-                    TextRendering_PrintString(window, "Segure L para carregar, solte para lancar", -0.45f, -0.88f, 1.0f);
+                    TextRendering_PrintString(window, "Segure L para mirar (cheio = certeiro), solte para lancar", -0.50f, -0.88f, 1.0f);
                 }
             }
             else if (g_CaptureState == CaptureState::Throwing)
             {
                 TextRendering_PrintString(window, "Lancando...", -0.1f, -0.85f, 1.2f);
             }
+            else if (g_CaptureState == CaptureState::Missed)
+            {
+                TextRendering_PrintString(window, "Errou! Tente de novo", -0.22f, -0.85f, 1.3f);
+            }
             else // Caught
             {
                 TextRendering_PrintString(window, "Pokemon capturado!", -0.25f, -0.85f, 1.4f);
             }
         }
-
-        // Imprimimos na tela os ângulos de Euler que controlam a rotação do
-        // terceiro cubo.
-        TextRendering_ShowEulerAngles(window);
-
-        // Imprimimos na informação sobre a matriz de projeção sendo utilizada.
-        TextRendering_ShowProjection(window);
 
         // Imprimimos na tela informação sobre o número de quadros renderizados
         // por segundo (frames per second).
@@ -1781,9 +2039,9 @@ int main(int argc, char* argv[])
                     glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
                     glUniform1i(g_object_id_uniform, tt.modelObjId);
 
-                    // Charmander tem faces invertidas (rabo): desenha os dois lados.
-                    if (tt.modelObjId == CHARMANDER) glDisable(GL_CULL_FACE);
-                    else                             glEnable(GL_CULL_FACE);
+                    // Modelos com faces possivelmente invertidas: desenha dois lados.
+                    if (tt.modelObjId == CHARMANDER || tt.modelObjId == SNORLAX || tt.modelObjId == CHARMELEON || tt.modelObjId == RAICHU) glDisable(GL_CULL_FACE);
+                    else                                                          glEnable(GL_CULL_FACE);
                     DrawVirtualObject(tt.mesh);
                 }
 
@@ -1816,15 +2074,39 @@ int main(int argc, char* argv[])
                 glUniformMatrix4fv(g_view_uniform,       1, GL_FALSE, glm::value_ptr(dView));
                 glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(dProj));
 
-                // Parâmetros do tipo do Pokémon em detalhe (malha/escala/offset/textura).
+                // Parâmetros do tipo do Pokémon em detalhe. Tela grande => usa o
+                // modelo de EXIBIÇÃO (HD) quando existe; senão, a malha base.
                 const PokemonType& dt = g_PokeTypes[g_Captured[g_StorageDetail].type];
-                float spin = (float) glfwGetTime() * 1.5f;
+                bool        useHD  = (dt.dispMesh != nullptr);
+                const char* dMesh  = useHD ? dt.dispMesh        : dt.mesh;
+                int         dObj   = useHD ? dt.dispObjId        : dt.modelObjId;
+                glm::vec3   dOff   = useHD ? dt.dispDetailOffset : dt.detailOffset;
+                float       dScale = useHD ? dt.dispDetailScale  : dt.detailScale;
+
+                // Animação de evolução (se este Pokémon está evoluindo): gira mais
+                // rápido, vibra de tamanho e dá um FLASH de luz no meio (pico em u=0.5).
+                bool  evolvingThis = (g_EvolvingIndex == g_StorageDetail);
+                float spinSpeed    = evolvingThis ? 9.0f : 1.5f;
+                float spin  = (float) glfwGetTime() * spinSpeed;
+                float pulse = 1.0f;
+                if (evolvingThis)
+                {
+                    float u = g_EvolveTimer / EVOLVE_DURATION;          // 0..1
+                    pulse   = 1.0f + 0.20f * sinf(g_EvolveTimer * 20.0f); // vibra
+                    float flash = 1.0f + 3.5f * expf(-powf((u - 0.5f) * 5.0f, 2.0f));
+                    glUniform3f(g_light_tint_uniform, flash, flash, flash); // brilho
+                }
+
+                float dscale = dScale * pulse;
                 model = Matrix_Rotate_Y(spin)
-                      * Matrix_Scale(dt.detailScale, dt.detailScale, dt.detailScale)
-                      * Matrix_Translate(dt.detailOffset.x, dt.detailOffset.y, dt.detailOffset.z);
+                      * Matrix_Scale(dscale, dscale, dscale)
+                      * Matrix_Translate(dOff.x, dOff.y, dOff.z);
                 glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                glUniform1i(g_object_id_uniform, dt.modelObjId);
-                DrawVirtualObject(dt.mesh);
+                glUniform1i(g_object_id_uniform, dObj);
+                DrawVirtualObject(dMesh);
+
+                if (evolvingThis) // restaura a luz branca neutra
+                    glUniform3f(g_light_tint_uniform, 1.0f, 1.0f, 1.0f);
 
                 // Volta para o desenho 2D (identidade) para o ícone e os textos.
                 glDisable(GL_DEPTH_TEST);
@@ -1854,11 +2136,51 @@ int main(int argc, char* argv[])
                 snprintf(buf, sizeof(buf), "CP: %d / 200", p.cp);
                 TextRendering_PrintString(window, buf, -0.62f, -0.52f, 1.3f);
 
+                // Lista de ataques pela FAMÍLIA (forma base): vale para as formas
+                // evoluídas também (índice sempre 0..2).
+                int at = (p.type >= 0 && p.type < 5) ? g_CandyFamily[p.type] : 0;
                 TextRendering_PrintString(window, "Ataques:", -0.62f, -0.66f, 1.2f);
-                snprintf(buf, sizeof(buf), "- %s", g_AttackNames[p.atk1]);
+                snprintf(buf, sizeof(buf), "- %s", g_AttacksByType[at][p.atk1]);
                 TextRendering_PrintString(window, buf, -0.58f, -0.74f, 1.1f);
-                snprintf(buf, sizeof(buf), "- %s", g_AttackNames[p.atk2]);
+                snprintf(buf, sizeof(buf), "- %s", g_AttacksByType[at][p.atk2]);
                 TextRendering_PrintString(window, buf, -0.58f, -0.82f, 1.1f);
+
+                // --- Evolução (doces por espécie) -----------------------------
+                int  fam     = (p.type >= 0 && p.type < 5) ? g_CandyFamily[p.type] : 0;
+                int  evoTo   = (p.type >= 0 && p.type < 5) ? g_EvolvesTo[p.type]   : -1;
+                int  evoCost = (p.type >= 0 && p.type < 5) ? g_EvolveCost[p.type]  : 0;
+                bool evolvingThisTxt = (g_EvolvingIndex == g_StorageDetail);
+
+                if (evolvingThisTxt)
+                {
+                    // Animação rolando: aviso central, sem botão.
+                    std::string ev = "Evoluindo...";
+                    float es = 1.8f;
+                    float ew = ev.size() * TextRendering_CharWidth(window) * es;
+                    TextRendering_PrintString(window, ev, -ew * 0.5f, 0.30f, es);
+                }
+                else if (evoTo >= 0)
+                {
+                    // Mostra os doces e o botão de evoluir.
+                    snprintf(buf, sizeof(buf), "Doces de %s: %d / %d",
+                             g_PokeTypes[fam].name, g_Candies[fam], evoCost);
+                    TextRendering_PrintString(window, buf, 0.16f, -0.44f, 1.0f);
+
+                    bool canEvolve = (g_Candies[fam] >= evoCost) && (p.placedGym < 0);
+
+                    // Fundo do botão (borda + painel) + rótulo centralizado.
+                    // Desenha em 2D (sem teste de profundidade) para ficar por cima.
+                    glDisable(GL_DEPTH_TEST);
+                    DrawUIQuad(EVO_BTN_CX, EVO_BTN_CY, EVO_BTN_HW + 0.012f, EVO_BTN_HH + 0.012f, UI_BORDER);
+                    DrawUIQuad(EVO_BTN_CX, EVO_BTN_CY, EVO_BTN_HW, EVO_BTN_HH, UI_PANEL);
+                    glEnable(GL_DEPTH_TEST);
+
+                    const char* label = canEvolve ? "EVOLUIR"
+                                      : (p.placedGym >= 0 ? "No ginasio" : "Doces insuf.");
+                    float ls = 1.1f;
+                    float lw = strlen(label) * TextRendering_CharWidth(window) * ls;
+                    TextRendering_PrintString(window, label, EVO_BTN_CX - lw * 0.5f, EVO_BTN_CY - 0.02f, ls);
+                }
 
                 TextRendering_PrintString(window, "(clique para voltar)", 0.34f, -0.92f, 0.8f);
             }
@@ -1901,6 +2223,7 @@ int main(int argc, char* argv[])
                         float y   = 0.34f - rel * 0.32f;
                         const CapturedPokemon& cp = g_Captured[i];
                         std::string lbl = g_PokeTypes[cp.type].name;
+                        if (cp.placedGym >= 0) lbl += " (gym)"; // já está num ginásio
                         float tw = lbl.size() * cw;
                         TextRendering_PrintString(window, lbl, x - tw * 0.5f, y - ths - 0.05f, labelScale);
                     }
@@ -1987,8 +2310,20 @@ int main(int argc, char* argv[])
             glEnable(GL_DEPTH_TEST);
             glEnable(GL_CULL_FACE);
 
-            std::string t1 = "Deixar um Pokemon";
-            std::string t2 = "neste ginasio?";
+            // Texto conforme o estado do ginásio: livre -> deixar Pokémon;
+            // ocupado -> dar uma fruta ao Pokémon (mostra quantas frutas você tem).
+            bool gymOccupied = (g_GymModalIndex >= 0 && g_Gyms[g_GymModalIndex].pokemonType >= 0);
+            std::string t1, t2;
+            if (gymOccupied)
+            {
+                t1 = "Dar uma fruta ao Pokemon?";
+                t2 = "(Frutas: " + std::to_string(g_NumBerries) + ")";
+            }
+            else
+            {
+                t1 = "Deixar um Pokemon";
+                t2 = "neste ginasio?";
+            }
             float ts = 1.6f;
             float w1 = t1.size() * TextRendering_CharWidth(window) * ts;
             float w2 = t2.size() * TextRendering_CharWidth(window) * ts;
@@ -2185,6 +2520,11 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage16"), 16);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage17"), 17);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage18"), 18);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage19"), 19);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage20"), 20);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage21"), 21);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage22"), 22);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage23"), 23);
     glUseProgram(0);
 }
 
@@ -2677,15 +3017,46 @@ void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 // de tempo. Utilizadas no callback CursorPosCallback() abaixo.
 double g_LastCursorPosX, g_LastCursorPosY;
 
-// Função callback chamada sempre que o usuário aperta algum dos botões do mouse
-// Aceita deixar um Pokémon no ginásio: fecha o modal e abre o armazenamento em
-// modo "colocar" (o próximo Pokémon clicado vai para o ginásio).
+// "Sim" no modal do ginásio. Se o ginásio está LIVRE, abre o armazenamento para
+// colocar um Pokémon. Se está OCUPADO, dá uma fruta ao Pokémon (caso o jogador
+// tenha): a fruta voa do jogador até o Pokémon (acima do ginásio) por Bézier.
 void GymModalAccept()
 {
-    g_GymModalOpen    = false;
-    g_PlacingGymIndex = g_GymModalIndex;
-    g_StorageOpen     = true;
-    g_StorageDetail   = -1;
+    if (g_GymModalIndex < 0) { g_GymModalOpen = false; return; }
+    Gym& gym = g_Gyms[g_GymModalIndex];
+
+    if (gym.pokemonType < 0)
+    {
+        // Ginásio livre: abre o armazenamento em modo "colocar".
+        g_PlacingGymIndex = g_GymModalIndex;
+        g_StorageOpen     = true;
+        g_StorageDetail   = -1;
+    }
+    else if (g_NumBerries > 0)
+    {
+        // Ginásio ocupado: dá uma fruta ao Pokémon (voa por Bézier cúbica).
+        g_NumBerries--;
+        glm::vec3 start = glm::vec3(g_PlayerX, -0.6f, g_PlayerZ);
+        glm::vec3 endp  = glm::vec3(gym.position.x, gym.position.y + 1.75f, gym.position.z);
+        glm::vec3 d = endp - start;
+        FlyingItem fi;
+        fi.type = ITEM_BERRY;
+        fi.p0 = start;
+        fi.p1 = start + d*0.33f + glm::vec3(0.0f, 0.9f, 0.0f);
+        fi.p2 = start + d*0.66f + glm::vec3(0.0f, 0.9f, 0.0f);
+        fi.p3 = endp;
+        fi.t  = 0.0f;
+        g_FlyingItems.push_back(fi);
+        g_Message = "Voce deu uma fruta!"; g_MessageTimer = 2.5f;
+    }
+    else
+    {
+        // Ginásio ocupado mas sem frutas no inventário.
+        g_Message = "Voce nao tem frutas!"; g_MessageTimer = 2.5f;
+    }
+
+    g_GymModalOpen  = false;
+    g_GymModalIndex = -1;
 }
 
 // Recusa: fecha o modal e marca o ginásio para não reperguntar até o jogador
@@ -2748,6 +3119,11 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
         // Clique no ícone de armazenamento (canto inferior esquerdo) -> abre/fecha
         // a janela. Quando a janela está aberta, os cliques não afetam o mundo.
         // (Desabilitado durante a cena de captura.)
+        // Durante a animação de evolução, ignoramos cliques (não dá pra navegar
+        // nem cancelar até a transformação terminar).
+        if (g_EvolvingIndex >= 0)
+            return;
+
         if (g_CurrentScene != GameScene::Capture)
         {
             double mx, my; glfwGetCursorPos(window, &mx, &my);
@@ -2766,8 +3142,25 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
             {
                 if (g_StorageDetail >= 0)
                 {
+                    const CapturedPokemon& pd = g_Captured[g_StorageDetail];
+                    int  fam     = (pd.type >= 0 && pd.type < 5) ? g_CandyFamily[pd.type] : 0;
+                    int  evoTo   = (pd.type >= 0 && pd.type < 5) ? g_EvolvesTo[pd.type]   : -1;
+                    int  evoCost = (pd.type >= 0 && pd.type < 5) ? g_EvolveCost[pd.type]  : 0;
+                    bool inEvoBtn = (fabs(ndcX - EVO_BTN_CX) < EVO_BTN_HW
+                                  && fabs(ndcY - EVO_BTN_CY) < EVO_BTN_HH);
+
+                    if (inEvoBtn && evoTo >= 0 && g_Candies[fam] >= evoCost && pd.placedGym < 0)
+                    {
+                        // Clique no botão "Evoluir" com doces suficientes: começa a
+                        // animação (a troca de forma e o gasto de doces ocorrem nela).
+                        g_Candies[fam] -= evoCost;
+                        g_EvolvingIndex = g_StorageDetail;
+                        g_EvolveToType  = evoTo;
+                        g_EvolveTimer   = 0.0f;
+                        g_EvolveSwapped = false;
+                    }
                     // detalhe: clicar fora do painel fecha a janela; dentro volta à grade
-                    if (fabs(ndcX) > 0.78f || fabs(ndcY) > 0.92f)
+                    else if (fabs(ndcX) > 0.78f || fabs(ndcY) > 0.92f)
                     {
                         g_StorageOpen   = false;
                         g_StorageDetail = -1;
@@ -2796,13 +3189,23 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
                         {
                             if (g_PlacingGymIndex >= 0)
                             {
-                                // Modo "colocar": este Pokémon vai para o ginásio,
-                                // que passa a ter a cor do meu time.
-                                g_Gyms[g_PlacingGymIndex].team        = g_PlayerTeam;
-                                g_Gyms[g_PlacingGymIndex].pokemonType = g_Captured[i].type;
-                                g_PlacingGymIndex  = -1;
-                                g_StorageOpen      = false;
-                                g_StorageDetail    = -1;
+                                // Modo "colocar": só se este Pokémon NÃO estiver já
+                                // em outro ginásio. Caso esteja, ignora o clique
+                                // (avisa) e continua aguardando uma escolha válida.
+                                if (g_Captured[i].placedGym >= 0)
+                                {
+                                    g_Message      = "Esse Pokemon ja esta num ginasio!";
+                                    g_MessageTimer = 2.5f;
+                                }
+                                else
+                                {
+                                    g_Gyms[g_PlacingGymIndex].team        = g_PlayerTeam;
+                                    g_Gyms[g_PlacingGymIndex].pokemonType = g_Captured[i].type;
+                                    g_Captured[i].placedGym = g_PlacingGymIndex; // marca como ocupado
+                                    g_PlacingGymIndex  = -1;
+                                    g_StorageOpen      = false;
+                                    g_StorageDetail    = -1;
+                                }
                             }
                             else
                             {
@@ -2881,6 +3284,7 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
                 g_BalloonClickCheck = true;
                 g_GymClickCheck     = true;
                 g_StopClickCheck    = true;
+                g_PokeClickCheck    = true;
                 g_ClickPosX = cx;
                 g_ClickPosY = cy;
             }

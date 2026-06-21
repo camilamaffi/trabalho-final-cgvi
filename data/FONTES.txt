@@ -7,10 +7,44 @@ Observacao: modelo original em GLB; convertido para OBJ mantendo as UVs; a textu
 da paleta original foi salva em data/adventurer_palette.png e mapeada por UV.
 
 Texturas tex_pikachu.png, tex_stone.png, tex_metal.png, tex_dark.png, rocket_r.png,
-tex_charmander.png e charmander_icon.png: geradas pela propria dupla (Python/PIL) - sem fonte externa.
+tex_charmander.png, charmander_icon.png e tex_snorlax.png: geradas pela propria dupla (Python/PIL) - sem fonte externa.
+
+Pikachu HD (pikachu_hd.obj + tex_pikachu_hd.png): modelo de EXIBICAO, usado SO nas
+telas grandes (captura, detalhe do armazenamento e Pokemon no ginasio). Convertido
+pela dupla de 025_pikachu.glb (modelo de terceiros, em glTF) para OBJ; as texturas
+embutidas foram unidas num ATLAS (tex_pikachu_hd.png) e as UVs remapeadas (textura
+REAL do glTF, por UV). Normalizado (centrado XZ, base no chao, altura 1). Texturas
+de terceiros (do proprio glTF). No mapa/miniatura segue o pikachu simples da dupla.
+[TODO: confirmar/colocar aqui a URL/fonte.]
 
 Charmander (charmander.obj): modelo feito pela propria dupla (sem fonte externa);
 normalizado (centrado na origem e escalado para altura 1; UVs preservadas).
+Usado no MAPA e na miniatura do armazenamento (modelo simples da dupla).
+
+Charmander HD (charmander_hd.obj + tex_charmander_hd.png): modelo de EXIBICAO,
+usado SO nas telas grandes (captura, detalhe do armazenamento e Pokemon no
+ginasio). Convertido pela dupla de charmander.glb (modelo de terceiros, em glTF)
+para OBJ; as 4 texturas embutidas (uma por material) foram unidas num ATLAS
+(tex_charmander_hd.png) e as UVs remapeadas, de modo a usar a TEXTURA REAL do
+glTF por UV. Normalizado (centrado em XZ, base no chao, altura 1). As texturas
+sao de terceiros (do proprio glTF). [TODO: confirmar/colocar aqui a URL/fonte.]
+
+Snorlax (snorlax.obj): modelo feito pela propria dupla (sem fonte externa);
+normalizado (centrado, base no chao, altura 1; UVs preservadas).
+
+Raichu (raichu.obj + tex_raichu.png): forma evoluida do Pikachu. Convertido pela
+dupla de raichu.glb (modelo de terceiros, em glTF) para OBJ; texturas embutidas
+unidas num ATLAS (tex_raichu.png) e UVs remapeadas (textura REAL do glTF, por UV).
+Normalizado (centrado XZ, base no chao, altura 1). Texturas de terceiros (do
+proprio glTF). [TODO: confirmar/colocar aqui a URL/fonte.]
+
+Charmeleon (charmeleon.obj + tex_charmeleon.png): forma evoluida do Charmander.
+Convertido pela dupla do arquivo charmeleon.glb (modelo de terceiros, em glTF)
+para OBJ; normalizado (centrado em XZ, base no chao, altura 1). O modelo usava 5
+texturas (uma por material) embutidas no glTF; a dupla as uniu num unico ATLAS
+(tex_charmeleon.png, 1024x256) e remapeou as UVs para esse atlas, de modo que o
+Charmeleon usa a TEXTURA REAL do glTF (mapeada por UV). As texturas originais sao
+de terceiros (do proprio glTF). [TODO: confirmar/colocar aqui a URL/fonte original.]
 
 Fundo da cena de captura (mapa-captura.png): imagem gerada pelo ChatGPT (OpenAI).
 
@@ -26,6 +60,3 @@ Fonte: https://sketchfab.com/3d-models/pokemon-go-assets-e142f01c01ed48af96a0637
 Convertidos pela dupla para OBJ com cor por vertice (assada a partir dos materiais
 do glTF), normalizados (centrados, base no chao, altura 1). Ginasios separados em
 variantes por cor de time (+ cinza para os livres).
-
-Ginasio antigo (gym.obj) - NAO mais usado. Era o modelo do PokeGym (impressao 3D):
-https://www.dorchester3d.com/pt/impressao/blogue/2016/08/pokemon-go-gym

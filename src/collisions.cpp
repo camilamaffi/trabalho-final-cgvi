@@ -72,3 +72,12 @@ bool CircleCollision(float playerX, float playerZ, float playerHalfSize,
     float sum = playerHalfSize + objRadius;
     return (dx*dx + dz*dz) < (sum*sum);
 }
+
+// Colisão esfera-esfera 3D (Pokébola vs Pokémon na captura). Verdadeiro quando a
+// distância entre os centros é menor que a soma dos raios.
+bool SphereCollision(const glm::vec3& a, float ra, const glm::vec3& b, float rb)
+{
+    glm::vec3 d = a - b;
+    float sum   = ra + rb;
+    return (d.x*d.x + d.y*d.y + d.z*d.z) < (sum*sum);
+}

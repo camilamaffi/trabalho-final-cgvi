@@ -47,6 +47,18 @@ A HUD mostra o modo atual no canto superior esquerdo.
 - Para **fechar** a janela: aperte **ESC** ou clique **fora** do painel.
 - Com a janela aberta, use a **rodinha do mouse** para rolar (se houver muitos).
 
+### Evolução (doces por espécie, estilo Pokémon GO)
+
+- Cada **captura** rende **doces** da espécie (família) do Pokémon capturado.
+- Na tela de **detalhe**, os Pokémon que evoluem mostram quantos doces você tem e
+  o custo, com um botão **EVOLUIR**. Com doces suficientes, clique no botão: o
+  Pokémon **gira rápido**, **vibra** e dá um **flash de luz** (animação de
+  evolução) e então vira a **forma evoluída**, mais forte (ganha CP e HP).
+- Evoluir **gasta** os doces. Um Pokémon que está **defendendo um ginásio** não
+  pode evoluir (recolha-o antes). Formas finais não mostram o botão.
+- Evoluções atuais: **Pikachu → Raichu**, **Charmander → Charmeleon**
+  (Snorlax não evolui).
+
 ## Interações no mapa
 
 - **PokéStops**: a **forma** depende da distância (longe = **fechada**, perto =
@@ -54,10 +66,11 @@ A HUD mostra o modo atual no canto superior esquerdo.
   em cooldown). Chegue **perto** (fica aberta) e **clique** para coletar itens
   (**+2 Pokébolas, +1 Poção**); ao coletar ela fica **cinza por 30 segundos** e
   depois volta ao azul. Estoque máximo: **100** de cada item.
-- **Pokémon (Pikachu e Charmander)**: há dois tipos espalhados pelo mapa.
-  Aparecem quando você chega perto e somem ao se afastar. Encostar em um deles
-  inicia a **cena de captura**. No armazenamento cada um aparece com o nome do
-  seu tipo (Pikachu / Charmander).
+- **Pokémon (Pikachu, Charmander e Snorlax)**: há três tipos espalhados pelo
+  mapa. Aparecem quando você chega perto e somem ao se afastar. Você **atravessa**
+  o corpo deles ao andar (eles não bloqueiam); para capturar, **clique** no
+  Pokémon — isso abre a **cena de captura**. No armazenamento cada um aparece com
+  o nome do seu tipo.
 - **Ginásios**: começam **cinza** (livres). Chegue **perto** e **clique** no
   ginásio para abrir um modal perguntando se quer deixar um Pokémon (clicar de
   longe não faz nada): responda com **clique**

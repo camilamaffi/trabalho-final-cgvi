@@ -57,6 +57,11 @@ uniform vec3 light_tint;
 #define UI_LOGO_VALOR     29
 #define UI_LOGO_MYSTIC    30
 #define UI_LOGO_INSTINCT  31
+#define SNORLAX           32
+#define CHARMELEON        33
+#define CHARMANDER_HD     34
+#define PIKACHU_HD        35
+#define RAICHU            36
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -83,6 +88,11 @@ uniform sampler2D TextureImage15; // fundo da cena de captura (mapa-captura.png)
 uniform sampler2D TextureImage16; // logo do time Valor (UI, com alpha)
 uniform sampler2D TextureImage17; // logo do time Mystic (UI, com alpha)
 uniform sampler2D TextureImage18; // logo do time Instinct (UI, com alpha)
+uniform sampler2D TextureImage19; // snorlax (via UV)
+uniform sampler2D TextureImage20; // charmeleon (atlas das 5 texturas do glTF, via UV)
+uniform sampler2D TextureImage21; // charmander HD (atlas das texturas do glTF, via UV)
+uniform sampler2D TextureImage22; // pikachu HD (atlas das texturas do glTF, via UV)
+uniform sampler2D TextureImage23; // raichu (atlas das texturas do glTF, via UV)
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -153,6 +163,32 @@ void main()
     {
         // Charmander: textura laranja, mapeada pelas UVs do modelo
         Kd0 = texture(TextureImage13, texcoords).rgb;
+    }
+    else if ( object_id == SNORLAX )
+    {
+        // Snorlax: textura teal, mapeada pelas UVs do modelo
+        Kd0 = texture(TextureImage19, texcoords).rgb;
+    }
+    else if ( object_id == CHARMELEON )
+    {
+        // Charmeleon (evolução): textura REAL do glTF, unida num atlas e mapeada
+        // pelas UVs remapeadas do modelo.
+        Kd0 = texture(TextureImage20, texcoords).rgb;
+    }
+    else if ( object_id == CHARMANDER_HD )
+    {
+        // Charmander HD (exibição): textura real do glTF (atlas), via UV.
+        Kd0 = texture(TextureImage21, texcoords).rgb;
+    }
+    else if ( object_id == PIKACHU_HD )
+    {
+        // Pikachu HD (exibição): textura real do glTF (atlas), via UV.
+        Kd0 = texture(TextureImage22, texcoords).rgb;
+    }
+    else if ( object_id == RAICHU )
+    {
+        // Raichu (evolução): textura real do glTF (atlas), via UV.
+        Kd0 = texture(TextureImage23, texcoords).rgb;
     }
     else if ( object_id == PLANE )
     {
@@ -321,7 +357,7 @@ void main()
         Ks = vec3(0.0);
         q  = 1.0;
     }
-    else if ( object_id == PIKACHU || object_id == CHARMANDER || object_id == POKESTOP || object_id == GYM_TOP || object_id == POKEBALL )
+    else if ( object_id == PIKACHU || object_id == CHARMANDER || object_id == SNORLAX || object_id == CHARMELEON || object_id == CHARMANDER_HD || object_id == PIKACHU_HD || object_id == RAICHU || object_id == POKESTOP || object_id == GYM_TOP || object_id == POKEBALL )
     {
         // Pikachu, Charmander, disco do PokéStop, dourado do gym e pokébola: mais "polidos"
         Ks = vec3(0.5);

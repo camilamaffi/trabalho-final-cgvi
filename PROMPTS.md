@@ -201,3 +201,23 @@ de modelo novo: as PokéStops devem girar, os Pokémon devem oscilar de leve no 
 (`(sin(time*2+i)*0.5+0.5)*0.06`); uniform `light_tint` no shader multiplica `I`/`Ia`
 (neutro no mundo, varia quente↔frio na captura). Tudo por `glfwGetTime` (Δt).
 (`src/main.cpp`, `src/shader_fragment.glsl`)
+
+**24. Itens das PokéStops (aleatórios + voando por Bézier)**
+Prompt: "A PokéStop deve dar de 1 a 7 itens aleatórios entre Pokébola, Poção e
+Fruta (pelo menos 1 Pokébola). Cada item ganho voa do poste até o jogador por uma
+curva de Bézier cúbica, com o modelo certo de cada item. Pegue os modelos de poção e
+fruta no pacote pokemon-go-assets."
+→ Sorteio 1..7 (1º sempre Pokébola); inventário `g_NumBerries`; `FlyingItem`
+(p0..p3, `type`) animado por `EvalCubicBezier` com modelo por tipo. Modelos
+`potion.obj`/`berry.obj` convertidos do glTF (cor por vértice). (`src/main.cpp`,
+`data/potion.obj`, `data/berry.obj`)
+
+**25. Pokémon no ginásio: ver, não duplicar, dar fruta**
+Prompt: "O Pokémon deixado no ginásio deve ficar visível (flutuando acima dele). Um
+Pokémon que já está num ginásio não pode ser colocado em outro. E clicando num
+ginásio ocupado deve aparecer a opção de dar uma fruta (checando se tenho) — a fruta
+voa de mim até o Pokémon por Bézier cúbica."
+→ Defensor renderizado flutuando/girando sobre o ginásio; `CapturedPokemon.placedGym`
+bloqueia recolocação (rótulo "(gym)" na grade); modal do ginásio ramifica
+(livre→colocar / ocupado→dar fruta), fruta voa do jogador ao Pokémon via
+`EvalCubicBezier`. (`src/main.cpp`)

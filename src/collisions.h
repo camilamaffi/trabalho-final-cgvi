@@ -63,4 +63,10 @@ bool CheckCollision(float playerX, float playerZ, float playerHalfSize);
 bool CircleCollision(float playerX, float playerZ, float playerHalfSize,
                      float objX, float objZ, float objRadius);
 
+// Colisão esfera-esfera no espaço 3D: true se as esferas de centros a/b e raios
+// ra/rb se intersectam (distância entre centros < soma dos raios). Usada na
+// captura para decidir se a Pokébola (centro a, raio ra) acertou o Pokémon
+// (centro b, raio rb).
+bool SphereCollision(const glm::vec3& a, float ra, const glm::vec3& b, float rb);
+
 #endif // COLLISIONS_H
