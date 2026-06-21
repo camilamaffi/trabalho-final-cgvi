@@ -247,6 +247,16 @@ enum class GameScene
 };
 
 GameScene g_CurrentScene = GameScene::World;
+
+// ===== Menu principal =====
+// MainMenu  -> tela inicial (Iniciar / Como Jogar / Sair)
+// HowToPlay -> tela de instruções (ESC volta ao menu)
+// Playing   -> jogo rodando normalmente
+enum class MenuState { MainMenu, HowToPlay, Playing };
+MenuState g_MenuState = MenuState::MainMenu;
+
+// Índice da opção selecionada no menu principal (0=Iniciar,1=ComoJogar,2=Sair)
+int g_MenuSelection = 0;
 int g_CaptureTargetIndex = -1;
 
 // --- Mecânica de captura (mira -> arremesso -> resultado) ---
@@ -876,6 +886,86 @@ int main(int argc, char* argv[])
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
     {
+        // ===== MENU PRINCIPAL / COMO JOGAR =====
+        if (g_MenuState != MenuState::Playing)
+        {
+            glClearColor(0.20f, 0.45f, 0.75f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glUseProgram(g_GpuProgramID);
+
+            if (g_MenuState == MenuState::MainMenu)
+            {
+                // Título
+                {
+                    std::string title = "Trabalho Final - INF01047";
+                    float ts = 3.0f;
+                    float tw = title.size() * TextRendering_CharWidth(window) * ts;
+                    TextRendering_PrintString(window, title, -tw * 0.5f, 0.65f, ts);
+                }
+
+                // Opções do menu
+                const char* labels[3] = { "  Iniciar Jogo  ", "  Como Jogar  ", "     Sair     " };
+                const float itemCY[3] = { 0.05f, -0.20f, -0.45f };
+                for (int i = 0; i < 3; ++i)
+                {
+                    std::string txt = (g_MenuSelection == i ? "> " : "  ");
+                    txt += labels[i];
+                    if (g_MenuSelection == i) txt += " <";
+                    float scale = (g_MenuSelection == i) ? 2.2f : 1.8f;
+                    float tw = txt.size() * TextRendering_CharWidth(window) * scale;
+                    TextRendering_PrintString(window, txt, -tw * 0.5f, itemCY[i], scale);
+                }
+
+                // Rodapé
+                {
+                    std::string hint = "W/S ou Setas para navegar  |  Enter ou clique para selecionar";
+                    float hs = 0.9f;
+                    float hw = hint.size() * TextRendering_CharWidth(window) * hs;
+                    TextRendering_PrintString(window, hint, -hw * 0.5f, -0.80f, hs);
+                }
+            }
+            else // HowToPlay
+            {
+                std::string title = "Como Jogar";
+                float ts = 2.5f;
+                float tw = title.size() * TextRendering_CharWidth(window) * ts;
+                TextRendering_PrintString(window, title, -tw * 0.5f, 0.72f, ts);
+
+                float ls = 1.15f;
+                float charW = TextRendering_CharWidth(window) * ls;
+                float xMid = 0.02f;
+                float gap  = 0.04f;
+ 
+                struct HTPRow { const char* key; const char* desc; };
+                HTPRow rows[] = {
+                    { "WASD ou Setas",   "Mover o personagem"                   },
+                    { "Mouse (arrastar)","Rotacionar a camera"                   },
+                    { "C",              "Alternar camera (3a pessoa / livre)"    },
+                    { "L (segurar)",    "Carregar e lancar Pokebola na captura"  },
+                    { "ESC",            "Voltar / Sair da cena atual"            },
+                };
+                float startY = 0.38f;
+                float stepY  = 0.155f;
+                int nRows = (int)(sizeof(rows)/sizeof(rows[0]));
+                for (int i = 0; i < nRows; ++i)
+                {
+                    float y = startY - i * stepY;
+                    float kw = strlen(rows[i].key) * charW;
+                    TextRendering_PrintString(window, rows[i].key,  xMid - gap - kw, y, ls);
+                    TextRendering_PrintString(window, rows[i].desc, xMid + gap,      y, ls);
+                }
+
+                std::string back = "[ ESC / Enter / Clique para voltar ]";
+                float bs = 1.1f;
+                float bw = back.size() * TextRendering_CharWidth(window) * bs;
+                TextRendering_PrintString(window, back, -bw * 0.5f, -0.82f, bs);
+            }
+
+            glfwSwapBuffers(window);
+            glfwPollEvents();
+            continue;
+        }
+
         // Aqui executamos as operações de renderização
 
         // Definimos a cor do "fundo" do framebuffer como branco.  Tal cor é
@@ -902,6 +992,7 @@ int main(int argc, char* argv[])
         static float prev_time = (float)glfwGetTime();
         float curr_time = (float)glfwGetTime();
         float delta_t = curr_time - prev_time;
+        if (delta_t > 0.1f) delta_t = 0.1f; // evita salto na primeira frame após o menu
         prev_time = curr_time;
 
         float speed = 2.0f;
@@ -3090,6 +3181,37 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
     {
+        // ===== Clique no menu principal =====
+        if (g_MenuState == MenuState::MainMenu)
+        {
+            double mx, my; glfwGetCursorPos(window, &mx, &my);
+            int ww, wh; glfwGetWindowSize(window, &ww, &wh);
+            float ndcX = (float)(2.0 * mx / ww - 1.0);
+            float ndcY = (float)(1.0 - 2.0 * my / wh);
+
+            const float itemCY[3] = { 0.05f, -0.20f, -0.45f };
+            const float itemHW = 0.30f, itemHH = 0.09f;
+            for (int i = 0; i < 3; ++i)
+            {
+                if (fabs(ndcX) < itemHW && fabs(ndcY - itemCY[i]) < itemHH)
+                {
+                    g_MenuSelection = i;
+                    if (i == 0) { g_MenuState = MenuState::Playing; }
+                    else if (i == 1) { g_MenuState = MenuState::HowToPlay; }
+                    else if (i == 2) { glfwSetWindowShouldClose(window, GLFW_TRUE); }
+                    return;
+                }
+            }
+            return;
+        }
+
+        // ===== Clique na tela "Como Jogar" volta ao menu =====
+        if (g_MenuState == MenuState::HowToPlay)
+        {
+            g_MenuState = MenuState::MainMenu;
+            return;
+        }
+
         // Modal de escolha de time (abertura do jogo): clicar num dos botões
         // define o time e fecha o modal. Enquanto aberto, nada mais é clicável.
         if (g_TeamModalOpen)
@@ -3455,6 +3577,34 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // laboratórios. Deve ser sempre o primeiro comando desta função KeyCallback().
     Correcao_KeyCallback(key, action, mod);
     // =======================
+
+    // ===== Navegação no menu principal =====
+    if (g_MenuState == MenuState::MainMenu && action == GLFW_PRESS)
+    {
+        if (key == GLFW_KEY_UP || key == GLFW_KEY_W)
+            { g_MenuSelection = (g_MenuSelection + 2) % 3; return; }
+        if (key == GLFW_KEY_DOWN || key == GLFW_KEY_S)
+            { g_MenuSelection = (g_MenuSelection + 1) % 3; return; }
+        if (key == GLFW_KEY_ENTER || key == GLFW_KEY_SPACE)
+        {
+            if (g_MenuSelection == 0) { g_MenuState = MenuState::Playing;  return; }
+            if (g_MenuSelection == 1) { g_MenuState = MenuState::HowToPlay; return; }
+            if (g_MenuSelection == 2) { glfwSetWindowShouldClose(window, GLFW_TRUE); return; }
+        }
+        if (key == GLFW_KEY_ESCAPE)
+            { glfwSetWindowShouldClose(window, GLFW_TRUE); return; }
+    }
+
+    // ===== Tela "Como Jogar" -> ESC/Enter volta ao menu =====
+    if (g_MenuState == MenuState::HowToPlay && action == GLFW_PRESS)
+    {
+        if (key == GLFW_KEY_ESCAPE || key == GLFW_KEY_ENTER || key == GLFW_KEY_SPACE)
+            { g_MenuState = MenuState::MainMenu; return; }
+    }
+
+    // Se ainda estamos no menu, não processar as teclas do jogo
+    if (g_MenuState != MenuState::Playing)
+        return;
 
     // Modal do ginásio: Y deixa um Pokémon (abre o armazenamento), N recusa.
     if (g_GymModalOpen && action == GLFW_PRESS)
@@ -3889,4 +4039,3 @@ void PrintObjModelInfo(ObjModel* model)
 
 // set makeprg=cd\ ..\ &&\ make\ run\ >/dev/null
 // vim: set spell spelllang=pt_br :
-
