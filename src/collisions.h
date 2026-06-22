@@ -75,4 +75,11 @@ bool CircleCollision(float playerX, float playerZ, float playerHalfSize,
 // (centro b, raio rb).
 bool SphereCollision(const glm::vec3& a, float ra, const glm::vec3& b, float rb);
 
+// Sobreposição de duas AABBs (caixas alinhadas aos eixos) no plano XZ, dadas por
+// centro (ax,az)/(bx,bz) e meias-extensões (ahx,ahz)/(bhx,bhz). True se as caixas
+// se sobrepõem. Usada para o Pokémon (re)aparecer SEM cair em cima de uma
+// estrutura (ginásio / PokéStop) — a estrutura tem prioridade de não ser coberta.
+bool AABBOverlapXZ(float ax, float az, float ahx, float ahz,
+                   float bx, float bz, float bhx, float bhz);
+
 #endif // COLLISIONS_H

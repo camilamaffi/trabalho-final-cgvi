@@ -81,3 +81,14 @@ bool SphereCollision(const glm::vec3& a, float ra, const glm::vec3& b, float rb)
     float sum   = ra + rb;
     return (d.x*d.x + d.y*d.y + d.z*d.z) < (sum*sum);
 }
+
+// Sobreposição de duas AABBs no plano XZ: há colisão quando as projeções em X e em
+// Z se sobrepõem ao mesmo tempo (mesma lógica do teste jogador-objeto, generalizada
+// para duas caixas quaisquer). Usada no (re)spawn dos Pokémon vs estruturas.
+bool AABBOverlapXZ(float ax, float az, float ahx, float ahz,
+                   float bx, float bz, float bhx, float bhz)
+{
+    bool overlapX = fabs(ax - bx) < (ahx + bhx);
+    bool overlapZ = fabs(az - bz) < (ahz + bhz);
+    return overlapX && overlapZ;
+}

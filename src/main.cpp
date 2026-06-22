@@ -406,28 +406,52 @@ float       g_MessageTimer = 0.0f; // segundos restantes mostrando a mensagem
 const float POKEMON_RESPAWN_DELAY = 8.0f;
 
 // Sorteia uma posição livre no mapa para um Pokémon (re)aparecer: dentro de
-// [-3.5, 3.5] em X/Z, longe do jogador e sem ficar em cima de outro Pokémon ativo.
-glm::vec3 RandomPokemonSpot(float yBase)
+// [-3.5, 3.5] em X/Z, longe do jogador, sem ficar em cima de outro Pokémon ativo
+// e — via teste AABB (caixa×caixa) — sem cair sobre um ginásio ou PokéStop (a
+// estrutura tem prioridade de não ser coberta).
+glm::vec3 RandomPokemonSpot(const SceneEntity& e)
 {
-    const float MIN_SEP = 1.2f; // distância mínima de outro Pokémon
+    const float MIN_SEP   = 1.2f;  // distância mínima de outro Pokémon
+    const float GYM_HALF  = 0.5f;  // meia-caixa (AABB) do ginásio
+    const float STOP_HALF = 0.35f; // meia-caixa (AABB) da PokéStop
+
+    // Caixa (AABB no plano XZ) do Pokémon que vai (re)aparecer: tamanho da
+    // bounding box da malha multiplicado pela escala da instância.
+    const SceneObject& pm = g_VirtualScene[e.mesh];
+    float phx = (pm.bbox_max.x - pm.bbox_min.x) * e.scale.x * 0.5f;
+    float phz = (pm.bbox_max.z - pm.bbox_min.z) * e.scale.z * 0.5f;
+
     float x = 0.0f, z = 0.0f;
-    for (int tries = 0; tries < 100; ++tries)
+    for (int tries = 0; tries < 120; ++tries)
     {
         x = ((float)rand() / (float)RAND_MAX) * 7.0f - 3.5f;
         z = ((float)rand() / (float)RAND_MAX) * 7.0f - 3.5f;
         float pdx = x - g_PlayerX, pdz = z - g_PlayerZ;
         if (pdx*pdx + pdz*pdz < 1.2f*1.2f) // não nasce em cima do jogador
             continue;
-        bool tooClose = false;
-        for (const SceneEntity& e : g_Entities)
+
+        bool bad = false;
+        // Longe de outro Pokémon ativo.
+        for (const SceneEntity& o : g_Entities)
         {
-            if (e.pokeType < 0 || !e.collidable) continue; // só Pokémon ativos
-            float dx = x - e.position.x, dz = z - e.position.z;
-            if (dx*dx + dz*dz < MIN_SEP*MIN_SEP) { tooClose = true; break; }
+            if (o.pokeType < 0 || !o.collidable) continue;
+            float dx = x - o.position.x, dz = z - o.position.z;
+            if (dx*dx + dz*dz < MIN_SEP*MIN_SEP) { bad = true; break; }
         }
-        if (!tooClose) break;
+        // AABB do Pokémon × AABB de cada ginásio.
+        if (!bad)
+            for (const Gym& g : g_Gyms)
+                if (AABBOverlapXZ(x, z, phx, phz, g.position.x, g.position.z, GYM_HALF, GYM_HALF))
+                { bad = true; break; }
+        // AABB do Pokémon × AABB de cada PokéStop.
+        if (!bad)
+            for (const PokeStop& s : g_PokeStops)
+                if (AABBOverlapXZ(x, z, phx, phz, s.position.x, s.position.z, STOP_HALF, STOP_HALF))
+                { bad = true; break; }
+
+        if (!bad) break;
     }
-    return glm::vec3(x, yBase, z);
+    return glm::vec3(x, e.baseY, z);
 }
 
 // Avalia um ponto de uma curva de Bézier cúbica com pontos de controle
@@ -918,6 +942,13 @@ int main(int argc, char* argv[])
         g_Gyms.push_back({ glm::vec3(-4.0f, -1.1f, -3.7f), Team::None, -1 });
         g_Gyms.push_back({ glm::vec3( 4.1f, -1.1f,  3.4f), Team::None, -1 });
         g_Gyms.push_back({ glm::vec3( 0.0f, -1.1f,  4.3f), Team::None, -1 });
+
+        // Os Pokémon foram posicionados ANTES das estruturas; agora que ginásios e
+        // PokéStops existem, re-sorteia cada Pokémon com RandomPokemonSpot, que usa
+        // o teste AABB para não deixá-los nascer em cima de uma estrutura.
+        for (SceneEntity& e : g_Entities)
+            if (e.pokeType >= 0)
+                e.position = RandomPokemonSpot(e);
     }
 
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
@@ -1302,8 +1333,8 @@ int main(int argc, char* argv[])
                 if (e.respawnTimer <= 0.0f)
                 {
                     e.respawnTimer = 0.0f;
-                    e.position     = RandomPokemonSpot(e.baseY); // novo lugar
-                    e.collidable   = true;                       // volta a ser capturável
+                    e.position     = RandomPokemonSpot(e); // novo lugar (evita estruturas)
+                    e.collidable   = true;                 // volta a ser capturável
                 }
             }
         }
