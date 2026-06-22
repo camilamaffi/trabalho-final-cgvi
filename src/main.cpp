@@ -316,6 +316,12 @@ const float EVOLVE_DURATION = 2.6f; // duração total da animação (s)
 const float EVO_BTN_CX = 0.40f, EVO_BTN_CY = -0.58f;
 const float EVO_BTN_HW = 0.22f, EVO_BTN_HH = 0.075f;
 
+// Giro do Pokémon na tela de detalhe: ângulo ACUMULADO (contínuo) + velocidade
+// suavizada — assim, ao passar do giro rápido da evolução para o giro normal,
+// não há salto de ângulo nem de velocidade.
+float g_DetailSpinAngle = 0.0f;
+float g_DetailSpinSpeed = 1.5f;
+
 int  g_CapturedCount    = 0;     // == g_Captured.size() (atalho)
 bool g_StorageOpen      = false; // janela de armazenamento aberta?
 int  g_StorageScrollRow = 0;     // linha do topo (rolagem)
@@ -395,6 +401,34 @@ std::string g_Message;
 float       g_MessageTimer = 0.0f; // segundos restantes mostrando a mensagem
 
 // (Protótipos de CheckCollision/FindCollidingEntityIndex estão em "collisions.h".)
+
+// Tempo (s) até um Pokémon capturado reaparecer em outro lugar do mapa.
+const float POKEMON_RESPAWN_DELAY = 8.0f;
+
+// Sorteia uma posição livre no mapa para um Pokémon (re)aparecer: dentro de
+// [-3.5, 3.5] em X/Z, longe do jogador e sem ficar em cima de outro Pokémon ativo.
+glm::vec3 RandomPokemonSpot(float yBase)
+{
+    const float MIN_SEP = 1.2f; // distância mínima de outro Pokémon
+    float x = 0.0f, z = 0.0f;
+    for (int tries = 0; tries < 100; ++tries)
+    {
+        x = ((float)rand() / (float)RAND_MAX) * 7.0f - 3.5f;
+        z = ((float)rand() / (float)RAND_MAX) * 7.0f - 3.5f;
+        float pdx = x - g_PlayerX, pdz = z - g_PlayerZ;
+        if (pdx*pdx + pdz*pdz < 1.2f*1.2f) // não nasce em cima do jogador
+            continue;
+        bool tooClose = false;
+        for (const SceneEntity& e : g_Entities)
+        {
+            if (e.pokeType < 0 || !e.collidable) continue; // só Pokémon ativos
+            float dx = x - e.position.x, dz = z - e.position.z;
+            if (dx*dx + dz*dz < MIN_SEP*MIN_SEP) { tooClose = true; break; }
+        }
+        if (!tooClose) break;
+    }
+    return glm::vec3(x, yBase, z);
+}
 
 // Avalia um ponto de uma curva de Bézier cúbica com pontos de controle
 // p0..p3 no parâmetro t em [0,1]:  B(t) = (1-t)^3 p0 + 3(1-t)^2 t p1
@@ -753,11 +787,11 @@ int main(int argc, char* argv[])
         // 3: Raichu (evolução do Pikachu) — modelo real (raichu.obj, textura via
         // atlas+UV; shape "raichu", altura 1). Forma única (sem base/HD). A cauda
         // é comprida, então detailScale menor para caber girando no painel.
-        { "Raichu",     "raichu", RAICHU,   UI_THUMB,   glm::vec3( 0.0f, -0.5f, 0.0f), 0.18f, 0.0f,
+        { "Raichu",     "raichu", RAICHU,   UI_THUMB,   glm::vec3( 0.0f, -0.5f, 0.0f), 0.13f, 0.0f,
           nullptr, 0, glm::vec3(0.0f), 0.0f, glm::vec3(0.0f), 0.0f, 0.0f },
         // 4: Charmeleon (evolução do Charmander) — modelo real (charmeleon.obj,
         // textura real via atlas+UV). Forma única (sem distinção base/HD).
-        { "Charmeleon", "charmeleon", CHARMELEON, UI_THUMB_2, glm::vec3( 0.0f, -0.5f, 0.0f), 0.30f, -1.5707963f,
+        { "Charmeleon", "charmeleon", CHARMELEON, UI_THUMB_2, glm::vec3( 0.0f, -0.5f, 0.0f), 0.22f, -1.5707963f,
           nullptr, 0, glm::vec3(0.0f), 0.0f, glm::vec3(0.0f), 0.0f, 0.0f },
     };
 
@@ -802,6 +836,7 @@ int main(int argc, char* argv[])
             pikachu.collidable = true;
             pikachu.appearRadius = 1.2f; // distância em que o pikachu surge
             pikachu.pokeType = 0;        // tipo 0 = Pikachu (ver g_PokeTypes)
+            pikachu.baseY = pikachu.position.y; // Y do chão (para o respawn)
             g_Entities.push_back(pikachu);
         }
 
@@ -821,6 +856,7 @@ int main(int argc, char* argv[])
             charmander.collidable = true;
             charmander.appearRadius = 1.2f;
             charmander.pokeType = 1;     // tipo 1 = Charmander (ver g_PokeTypes)
+            charmander.baseY = charmander.position.y; // Y do chão (para o respawn)
             g_Entities.push_back(charmander);
         }
 
@@ -837,6 +873,7 @@ int main(int argc, char* argv[])
             snorlax.collidable = true;
             snorlax.appearRadius = 1.2f;
             snorlax.pokeType = 2;        // tipo 2 = Snorlax (ver g_PokeTypes)
+            snorlax.baseY = snorlax.position.y; // Y do chão (para o respawn)
             g_Entities.push_back(snorlax);
         }
 
@@ -1209,8 +1246,14 @@ int main(int argc, char* argv[])
                         if (type >= 0 && type < 5)
                             g_Candies[g_CandyFamily[type]] += CANDY_PER_CATCH;
                     }
-                    g_Entities[g_CaptureTargetIndex].collidable = false;
-                    g_Entities[g_CaptureTargetIndex].position.y = -100.0f;
+                    // Some do mapa e agenda o RESPAWN: depois de um tempo reaparece
+                    // em outro lugar aleatório (mantém o mapa povoado).
+                    {
+                        SceneEntity& cap = g_Entities[g_CaptureTargetIndex];
+                        cap.collidable   = false;
+                        cap.position.y   = -100.0f;
+                        cap.respawnTimer = POKEMON_RESPAWN_DELAY;
+                    }
                     g_CurrentScene       = GameScene::World;
                     g_CaptureTargetIndex = -1;
 
@@ -1245,6 +1288,23 @@ int main(int argc, char* argv[])
                 g_EvolveToType  = -1;
                 g_EvolveTimer   = 0.0f;
                 g_EvolveSwapped = false;
+            }
+        }
+
+        // ---- Respawn dos Pokémon capturados ---------------------------------
+        // Cada Pokémon capturado conta o tempo e, ao zerar, reaparece em outro
+        // lugar aleatório do mapa (mantém sempre a mesma quantidade por tipo).
+        for (SceneEntity& e : g_Entities)
+        {
+            if (e.respawnTimer > 0.0f)
+            {
+                e.respawnTimer -= delta_t;
+                if (e.respawnTimer <= 0.0f)
+                {
+                    e.respawnTimer = 0.0f;
+                    e.position     = RandomPokemonSpot(e.baseY); // novo lugar
+                    e.collidable   = true;                       // volta a ser capturável
+                }
             }
         }
 
@@ -1426,6 +1486,9 @@ int main(int argc, char* argv[])
 
             // Na cena de captura, mostramos apenas o Pokémon alvo (esconde o resto).
             if (g_CurrentScene == GameScene::Capture && g_CaptureTargetIndex != static_cast<int>(i))
+                continue;
+            // Pokémon capturado aguardando respawn: não desenha (e não é clicável).
+            if (obj.respawnTimer > 0.0f)
                 continue;
             // Visibilidade por aproximação (estilo Pokémon GO): o Pokémon só
             // aparece quando o jogador entra no raio (appearRadius), mas aparece
@@ -2194,8 +2257,13 @@ int main(int argc, char* argv[])
                 // de forma; a forma nova SURGE crescendo (2ª metade). Um FLASH de luz
                 // marca o instante da troca (pico em u=0.5).
                 bool  evolvingThis = (g_EvolvingIndex == g_StorageDetail);
-                float spinSpeed    = evolvingThis ? 9.0f : 1.5f;
-                float spin  = (float) glfwGetTime() * spinSpeed;
+                // Velocidade-alvo (rápida na evolução, normal fora dela), suavizada
+                // por frame; o ângulo é ACUMULADO para não dar salto na transição
+                // entre o giro da evolução e o giro normal.
+                float targetSpin = evolvingThis ? 9.0f : 1.5f;
+                g_DetailSpinSpeed += (targetSpin - g_DetailSpinSpeed) * std::min(1.0f, delta_t * 4.0f);
+                g_DetailSpinAngle += g_DetailSpinSpeed * delta_t;
+                float spin  = g_DetailSpinAngle;
                 float grow  = 1.0f;
                 if (evolvingThis)
                 {

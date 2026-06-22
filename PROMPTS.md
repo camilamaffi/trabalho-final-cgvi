@@ -269,3 +269,22 @@ borrando as folhas de expressão → **NEAREST**; "placas pretas" = bochechas RG
 transparentes → atlas RGBA + `discard` no shader. Forma única (sem base/HD),
 object_ids `CHARMELEON`/`RAICHU`. (`src/main.cpp`, `src/shader_fragment.glsl`,
 `data/charmeleon.*`, `data/raichu.*`)
+
+**31. Respawn dos Pokémon**
+Prompt: "Quando um Pokémon é capturado, faça um novo do mesmo tipo aparecer em
+outro lugar aleatório do mapa depois de alguns segundos (mantendo sempre a mesma
+quantidade)."
+→ `SceneEntity` ganhou `respawnTimer`/`baseY`; a captura agenda o respawn
+(`POKEMON_RESPAWN_DELAY=8s`) em vez de remover; no loop, ao zerar, `RandomPokemonSpot`
+reposiciona (longe do jogador, sem sobrepor) e reativa. (`src/main.cpp`,
+`src/collisions.h`)
+
+**32. Ajustes de UI / legibilidade**
+Prompt: "Título da janela = Pokémon GO. Deixe o texto branco e mais fácil de ler.
+Centralize o 'clique para voltar'. Aumente o nome na miniatura. Charmeleon e Raichu
+estão grandes no detalhe. Suavize a transição do giro ao terminar a evolução. O
+Snorlax HD está com braços/orelhas pretos."
+→ Título UTF-8; text shader com `textColor` + sombra (2 passes, branco); rótulos
+recentrados/aumentados; `detailScale` reduzido; giro do detalhe por ângulo acumulado
++ velocidade suavizada; swatch de cor chapada do Snorlax codificado linear→sRGB.
+(`src/main.cpp`, `src/textrendering.cpp`, `data/tex_snorlax_hd.png`)

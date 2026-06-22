@@ -1,5 +1,4 @@
-# raichu - convertido de raichu.glb (modelo de terceiros)
-# UVs encaixadas no tile e remapeadas para o atlas tex_raichu.png; normalizado (base y=0, altura 1, centrado XZ)
+# raichu - convertido de raichu.glb (terceiros); atlas+UV remapeada, normalizado
 o raichu
 v 0.174085 0.667809 1.241336
 v 0.156340 0.649321 1.275277

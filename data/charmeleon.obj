@@ -1,5 +1,4 @@
-# charmeleon - convertido de charmeleon.glb (modelo de terceiros)
-# UVs encaixadas no tile e remapeadas para o atlas tex_charmeleon.png; normalizado (base y=0, altura 1, centrado XZ)
+# charmeleon - convertido de charmeleon.glb (terceiros); atlas+UV remapeada, normalizado
 o charmeleon
 v 0.044806 0.313992 -0.585783
 v 0.042938 0.383882 -0.582550

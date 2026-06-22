@@ -43,6 +43,12 @@ struct SceneEntity
 
     // Índice na tabela de tipos de Pokémon (-1 = não é Pokémon capturável).
     int pokeType = -1;
+
+    // Respawn: ao capturar, o Pokémon some e reaparece depois de um tempo.
+    //   respawnTimer > 0  -> capturado, contando para reaparecer.
+    //   baseY             -> Y do chão para reposicionar ao reaparecer.
+    float respawnTimer = 0.0f;
+    float baseY = 0.0f;
 };
 
 // Variáveis globais definidas em main.cpp e usadas nos testes de colisão.
