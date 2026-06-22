@@ -1693,7 +1693,7 @@ int main(int argc, char* argv[])
             const float STOP_NEAR_RADIUS       = 1.3f;  // distância para poder coletar
             const float POKESTOP_SIZE          = 0.8f;  // escala do modelo (altura 1)
             const float POKESTOP_COOLDOWN_TIME = 30.0f; // segundos cinza após coletar
-            const int   ITEM_MAX               = 100;   // estoque máximo por item
+            const int   ITEM_MAX               = 5;     // estoque máximo por item (5 p/ testar; era 100)
 
             int swW = 0, swH = 0;
             glfwGetWindowSize(window, &swW, &swH);
@@ -2436,7 +2436,7 @@ int main(int argc, char* argv[])
                         float y   = 0.34f - rel * 0.32f;
                         const CapturedPokemon& cp = g_Captured[i];
                         std::string lbl = g_PokeTypes[cp.type].name;
-                        if (cp.placedGym >= 0) lbl += " (gym)"; // já está num ginásio
+                        if (cp.placedGym >= 0) lbl += " (gin.)"; // já está num ginásio
                         float tw = lbl.size() * cw;
                         TextRendering_PrintString(window, lbl, x - tw * 0.5f, y - ths - 0.05f, labelScale);
                     }
