@@ -2291,7 +2291,12 @@ int main(int argc, char* argv[])
                     TextRendering_PrintString(window, label, EVO_BTN_CX - lw * 0.5f, EVO_BTN_CY - 0.02f, ls);
                 }
 
-                TextRendering_PrintString(window, "(clique para voltar)", 0.34f, -0.92f, 0.8f);
+                {
+                    const char* volta = "(clique para voltar)";
+                    float vs = 0.8f;
+                    float vw = strlen(volta) * TextRendering_CharWidth(window) * vs;
+                    TextRendering_PrintString(window, volta, -vw * 0.5f, -0.87f, vs);
+                }
             }
             else if (g_StorageOpen)
             {
@@ -2321,7 +2326,7 @@ int main(int argc, char* argv[])
                     const int COLS = 4, VIS_ROWS = 3;
                     const float ths = 0.13f;
                     const float xcols[4] = { -0.42f, -0.14f, 0.14f, 0.42f };
-                    const float labelScale = 0.6f;
+                    const float labelScale = 0.9f;
                     float cw = TextRendering_CharWidth(window) * labelScale;
                     int start = g_StorageScrollRow * COLS;
                     int end   = start + VIS_ROWS * COLS;

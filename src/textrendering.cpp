@@ -27,11 +27,12 @@ const GLchar* const textvertexshader_source = ""
 const GLchar* const textfragmentshader_source = ""
 "#version 330\n"
 "uniform sampler2D tex;\n"
+"uniform vec4 textColor;\n"            // cor (rgb) + opacidade (a) do texto
 "in vec2 texCoords;\n"
 "out vec4 fragColor;\n"
 "void main()\n"
 "{\n"
-    "fragColor = vec4(0, 0, 0, texture(tex, texCoords).r);\n"
+    "fragColor = vec4(textColor.rgb, textColor.a * texture(tex, texCoords).r);\n"
 "}\n"
 "\0";
 
@@ -86,6 +87,7 @@ GLuint textVAO;
 GLuint textVBO;
 GLuint textprogram_id;
 GLuint texttexture_id;
+GLint  texttextcolor_uniform; // cor do texto (uniform "textColor")
 
 void TextRendering_Init()
 {
@@ -115,6 +117,7 @@ void TextRendering_Init()
 
     GLuint texttex_uniform;
     texttex_uniform = glGetUniformLocation(textprogram_id, "tex");
+    texttextcolor_uniform = glGetUniformLocation(textprogram_id, "textColor");
     glCheckError();
 
     GLuint textureunit = 31;
@@ -152,6 +155,11 @@ void TextRendering_PrintString(GLFWwindow* window, const std::string &str, float
     float sx = scale / width;
     float sy = scale / height;
 
+    // Deslocamento da sombra (~2 px), para o texto branco ficar legível em
+    // qualquer fundo (claro ou escuro).
+    float offX = 2.0f / width;
+    float offY = 2.0f / height;
+
     for (size_t i = 0; i < str.size(); i++)
     {
         // Find the glyph for the character we are looking for
@@ -178,33 +186,40 @@ void TextRendering_PrintString(GLFWwindow* window, const std::string &str, float
         float s1 = glyph->s1 - 0.5f/dejavufont.tex_width;
         float t1 = glyph->t1 - 0.5f/dejavufont.tex_height;
 
-        struct {float x, y, s, t;} data[6] = {
-            { x0, y0, s0, t0 },
-            { x0, y1, s0, t1 },
-            { x1, y1, s1, t1 },
-            { x0, y0, s0, t0 },
-            { x1, y1, s1, t1 },
-            { x1, y0, s1, t0 }
-        };
-
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         glDepthFunc(GL_ALWAYS);
-        glBindBuffer(GL_ARRAY_BUFFER, textVBO);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, 24 * sizeof(float), data);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-
         glUseProgram(textprogram_id);
         glBindVertexArray(textVAO);
 
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        // Dois passes por glyph: 1) sombra escura deslocada; 2) texto branco.
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            float dx = (pass == 0) ?  offX : 0.0f;
+            float dy = (pass == 0) ? -offY : 0.0f;
+            if (pass == 0) glUniform4f(texttextcolor_uniform, 0.0f, 0.0f, 0.0f, 0.75f); // sombra
+            else           glUniform4f(texttextcolor_uniform, 1.0f, 1.0f, 1.0f, 1.0f);  // branco
+
+            struct {float x, y, s, t;} data[6] = {
+                { x0+dx, y0+dy, s0, t0 },
+                { x0+dx, y1+dy, s0, t1 },
+                { x1+dx, y1+dy, s1, t1 },
+                { x0+dx, y0+dy, s0, t0 },
+                { x1+dx, y1+dy, s1, t1 },
+                { x1+dx, y0+dy, s1, t0 }
+            };
+
+            glBindBuffer(GL_ARRAY_BUFFER, textVBO);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, 24 * sizeof(float), data);
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
 
         glBindVertexArray(0);
         glUseProgram(0);
         glDepthFunc(GL_LESS);
-
         glDisable(GL_BLEND);
 
         x += (glyph->advance_x * sx);
