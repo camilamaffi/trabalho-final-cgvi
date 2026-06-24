@@ -73,28 +73,25 @@ uniform vec4 bbox_max;
 uniform sampler2D TextureImage0;
 uniform sampler2D TextureImage1;
 uniform sampler2D TextureImage2;
-uniform sampler2D TextureImage3;
-uniform sampler2D TextureImage4; // paleta do jogador (via UV)
-uniform sampler2D TextureImage5; // pikachu (via UV)
-uniform sampler2D TextureImage6; // pedra (ginásio / PokéStop em cooldown)
-uniform sampler2D TextureImage7; // metal (PokéStop)
-uniform sampler2D TextureImage8; // tecido escuro (balão)
-uniform sampler2D TextureImage9; // grama (borda do mapa)
-uniform sampler2D TextureImage10; // pokébola (via UV)
-uniform sampler2D TextureImage11; // ícone do armazenamento (UI)
-uniform sampler2D TextureImage12; // miniatura do pikachu (UI)
-uniform sampler2D TextureImage13; // charmander (via UV)
-uniform sampler2D TextureImage14; // miniatura do charmander (UI)
-uniform sampler2D TextureImage15; // fundo da cena de captura (mapa-captura.png)
-uniform sampler2D TextureImage16; // logo do time Valor (UI, com alpha)
-uniform sampler2D TextureImage17; // logo do time Mystic (UI, com alpha)
-uniform sampler2D TextureImage18; // logo do time Instinct (UI, com alpha)
-uniform sampler2D TextureImage19; // snorlax (via UV)
-uniform sampler2D TextureImage20; // charmeleon (atlas das 5 texturas do glTF, via UV)
-uniform sampler2D TextureImage21; // charmander HD (atlas das texturas do glTF, via UV)
-uniform sampler2D TextureImage22; // pikachu HD (atlas das texturas do glTF, via UV)
-uniform sampler2D TextureImage23; // raichu (atlas das texturas do glTF, via UV)
-uniform sampler2D TextureImage24; // snorlax HD (atlas texturas+cores do glTF, via UV)
+uniform sampler2D TextureImage3; // paleta do jogador (via UV)
+uniform sampler2D TextureImage4; // pikachu (via UV)
+uniform sampler2D TextureImage5; // pedra (ginásio / PokéStop em cooldown)
+uniform sampler2D TextureImage6; // metal (PokéStop)
+uniform sampler2D TextureImage7; // tecido escuro (balão)
+uniform sampler2D TextureImage8; // grama (borda do mapa)
+uniform sampler2D TextureImage9; // pokébola (via UV)
+uniform sampler2D TextureImage10; // ícone do armazenamento (UI)
+uniform sampler2D TextureImage11; // charmander (via UV)
+uniform sampler2D TextureImage12; // fundo da cena de captura (mapa-captura.png)
+uniform sampler2D TextureImage13; // logo do time Valor (UI, com alpha)
+uniform sampler2D TextureImage14; // logo do time Mystic (UI, com alpha)
+uniform sampler2D TextureImage15; // logo do time Instinct (UI, com alpha)
+uniform sampler2D TextureImage16; // snorlax (via UV)
+uniform sampler2D TextureImage17; // charmeleon (atlas das 5 texturas do glTF, via UV)
+uniform sampler2D TextureImage18; // charmander HD (atlas das texturas do glTF, via UV)
+uniform sampler2D TextureImage19; // pikachu HD (atlas das texturas do glTF, via UV)
+uniform sampler2D TextureImage20; // raichu (atlas das texturas do glTF, via UV)
+uniform sampler2D TextureImage21; // snorlax HD (atlas texturas+cores do glTF, via UV)
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -154,54 +151,54 @@ void main()
     else if ( object_id == PLAYER )
     {
         // Boneco do jogador: textura-paleta do modelo, mapeada pelas UVs
-        Kd0 = texture(TextureImage4, texcoords).rgb;
+        Kd0 = texture(TextureImage3, texcoords).rgb;
     }
     else if ( object_id == PIKACHU )
     {
         // Pikachu: textura amarela, mapeada pelas UVs do modelo
-        Kd0 = texture(TextureImage5, texcoords).rgb;
+        Kd0 = texture(TextureImage4, texcoords).rgb;
     }
     else if ( object_id == CHARMANDER )
     {
         // Charmander: textura laranja, mapeada pelas UVs do modelo
-        Kd0 = texture(TextureImage13, texcoords).rgb;
+        Kd0 = texture(TextureImage11, texcoords).rgb;
     }
     else if ( object_id == SNORLAX )
     {
         // Snorlax: textura teal, mapeada pelas UVs do modelo
-        Kd0 = texture(TextureImage19, texcoords).rgb;
+        Kd0 = texture(TextureImage16, texcoords).rgb;
     }
     else if ( object_id == CHARMELEON )
     {
         // Charmeleon (evolução): textura REAL do glTF, unida num atlas e mapeada
         // pelas UVs remapeadas do modelo. Partes transparentes (alpha) são
         // descartadas para não virarem "placas pretas".
-        vec4 t = texture(TextureImage20, texcoords);
+        vec4 t = texture(TextureImage17, texcoords);
         if ( t.a < 0.5 ) discard;
         Kd0 = t.rgb;
     }
     else if ( object_id == CHARMANDER_HD )
     {
         // Charmander HD (exibição): textura real do glTF (atlas), via UV.
-        Kd0 = texture(TextureImage21, texcoords).rgb;
+        Kd0 = texture(TextureImage18, texcoords).rgb;
     }
     else if ( object_id == PIKACHU_HD )
     {
         // Pikachu HD (exibição): textura real do glTF (atlas), via UV.
-        Kd0 = texture(TextureImage22, texcoords).rgb;
+        Kd0 = texture(TextureImage19, texcoords).rgb;
     }
     else if ( object_id == RAICHU )
     {
         // Raichu (evolução): textura real do glTF (atlas), via UV. As bochechas
         // têm fundo transparente (alpha) -> descarta para não virar placa preta.
-        vec4 t = texture(TextureImage23, texcoords);
+        vec4 t = texture(TextureImage20, texcoords);
         if ( t.a < 0.5 ) discard;
         Kd0 = t.rgb;
     }
     else if ( object_id == SNORLAX_HD )
     {
         // Snorlax HD (exibição): textura real do glTF (atlas), via UV.
-        Kd0 = texture(TextureImage24, texcoords).rgb;
+        Kd0 = texture(TextureImage21, texcoords).rgb;
     }
     else if ( object_id == PLANE )
     {
@@ -212,12 +209,12 @@ void main()
             // Região central: map.png
             U = (position_world.x + cityHalf) / (2.0 * cityHalf);
             V = (position_world.z + cityHalf) / (2.0 * cityHalf);
-            Kd0 = texture(TextureImage1, vec2(U, V)).rgb;
+            Kd0 = texture(TextureImage0, vec2(U, V)).rgb;
         }
         else
         {
             // Região externa: textura de grama (mapeamento planar por X,Z do mundo)
-            Kd0 = texture(TextureImage9, position_world.xz * 0.5).rgb;
+            Kd0 = texture(TextureImage8, position_world.xz * 0.5).rgb;
         }
     }
     else if ( object_id == TREE )
@@ -227,61 +224,61 @@ void main()
     else if ( object_id == POKESTOP )
     {
         // PokéStop disponível: textura metálica (triplanar) tingida de azul.
-        Kd0 = triplanar(TextureImage7, position_world.xyz, n.xyz, 2.0) * vec3(0.20, 0.65, 1.10);
+        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 2.0) * vec3(0.20, 0.65, 1.10);
     }
     else if ( object_id == POKESTOP_COOLDOWN )
     {
         // PokéStop em cooldown: textura de pedra (triplanar) tingida de cinza.
-        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 2.0) * vec3(0.75, 0.75, 0.75);
+        Kd0 = triplanar(TextureImage5, position_world.xyz, n.xyz, 2.0) * vec3(0.75, 0.75, 0.75);
     }
     else if ( object_id == GYM )
     {
         // Ginásio livre: textura de pedra (triplanar), tom cinza
-        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 1.2);
+        Kd0 = triplanar(TextureImage5, position_world.xyz, n.xyz, 1.2);
     }
     else if ( object_id == GYM_RED )
     {
         // Ginásio do time Vermelho: pedra tingida de vermelho. O canal R passa de
         // 1.0 para compensar a pedra escura e deixar o vermelho mais vivo/claro.
-        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 1.2) * vec3(1.60, 0.50, 0.48);
+        Kd0 = triplanar(TextureImage5, position_world.xyz, n.xyz, 1.2) * vec3(1.60, 0.50, 0.48);
     }
     else if ( object_id == GYM_BLUE )
     {
         // Ginásio do time Azul: pedra tingida de azul
-        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 1.2) * vec3(0.35, 0.50, 0.98);
+        Kd0 = triplanar(TextureImage5, position_world.xyz, n.xyz, 1.2) * vec3(0.35, 0.50, 0.98);
     }
     else if ( object_id == GYM_YELLOW )
     {
         // Ginásio do time Amarelo: pedra tingida de amarelo
-        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 1.2) * vec3(1.00, 0.85, 0.30);
+        Kd0 = triplanar(TextureImage5, position_world.xyz, n.xyz, 1.2) * vec3(1.00, 0.85, 0.30);
     }
     else if ( object_id == GYM_MODEL )
     {
         // Modelo de ginásio do Pokémon GO: textura de pedra (triplanar) modulada
         // pela cor por vértice (que já codifica o time; cinza = livre). Assim a
         // cor vem da textura E mantém a identidade do time.
-        Kd0 = triplanar(TextureImage6, position_world.xyz, n.xyz, 2.0) * vertex_color * 1.4;
+        Kd0 = triplanar(TextureImage5, position_world.xyz, n.xyz, 2.0) * vertex_color * 1.4;
     }
     else if ( object_id == ROCKET )
     {
         // Balão da Equipe Rocket: textura escura (triplanar)
-        Kd0 = triplanar(TextureImage8, position_world.xyz, n.xyz, 1.5);
+        Kd0 = triplanar(TextureImage7, position_world.xyz, n.xyz, 1.5);
     }
     else if ( object_id == ROCKET_BASKET )
     {
         // Cesto/cordas do balão: textura escura (triplanar)
-        Kd0 = triplanar(TextureImage8, position_world.xyz, n.xyz, 4.0);
+        Kd0 = triplanar(TextureImage7, position_world.xyz, n.xyz, 4.0);
     }
     else if ( object_id == POKEBALL )
     {
         // Pokébola: textura (vermelho/preto/branco) mapeada pelas UVs do modelo
-        Kd0 = texture(TextureImage10, texcoords).rgb;
+        Kd0 = texture(TextureImage9, texcoords).rgb;
     }
     else if ( object_id == ROCKET_R )
     {
         // "R" da Equipe Rocket: textura (R vermelho em fundo preto). Descartamos
         // o fundo (fragmentos escuros) para mostrar só a letra sobre o balão.
-        vec3 rtex = texture(TextureImage3, texcoords).rgb;
+        vec3 rtex = texture(TextureImage2, texcoords).rgb;
         if (rtex.r < 0.35)
             discard;
         Kd0 = rtex;
@@ -292,12 +289,12 @@ void main()
         // (chão embaixo) com a orientação que levanta a placa virada ao centro.
         U = texcoords.x;
         V = 1.0 - texcoords.y;
-        Kd0 = texture(TextureImage2, vec2(U, V)).rgb;
+        Kd0 = texture(TextureImage1, vec2(U, V)).rgb;
     }
     else if ( object_id == CAPTURE_BG )
     {
         // Fundo da cena de captura: imagem mapa-captura.png (gerada pelo ChatGPT).
-        Kd0 = texture(TextureImage15, texcoords).rgb;
+        Kd0 = texture(TextureImage12, texcoords).rgb;
     }
     else if ( object_id == UI_PANEL )
     {
@@ -323,15 +320,7 @@ void main()
     }
     else if ( object_id == UI_ICON )
     {
-        Kd0 = texture(TextureImage11, texcoords).rgb;
-    }
-    else if ( object_id == UI_THUMB )
-    {
-        Kd0 = texture(TextureImage12, texcoords).rgb;
-    }
-    else if ( object_id == UI_THUMB_2 )
-    {
-        Kd0 = texture(TextureImage14, texcoords).rgb;
+        Kd0 = texture(TextureImage10, texcoords).rgb;
     }
 
     // Logos dos times: imagens com transparência. Amostramos RGBA e descartamos
@@ -339,9 +328,9 @@ void main()
     if ( object_id == UI_LOGO_VALOR || object_id == UI_LOGO_MYSTIC || object_id == UI_LOGO_INSTINCT )
     {
         vec4 logo;
-        if ( object_id == UI_LOGO_VALOR )       logo = texture(TextureImage16, texcoords);
-        else if ( object_id == UI_LOGO_MYSTIC ) logo = texture(TextureImage17, texcoords);
-        else                                    logo = texture(TextureImage18, texcoords);
+        if ( object_id == UI_LOGO_VALOR )       logo = texture(TextureImage13, texcoords);
+        else if ( object_id == UI_LOGO_MYSTIC ) logo = texture(TextureImage14, texcoords);
+        else                                    logo = texture(TextureImage15, texcoords);
         if ( logo.a < 0.5 )
             discard;
         color = vec4(pow(logo.rgb, vec3(1.0/2.2)), 1.0);

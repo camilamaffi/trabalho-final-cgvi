@@ -554,42 +554,38 @@ int main(int argc, char* argv[])
     //
     LoadShadersFromFiles();
 
-    // FONTE: textura red_brick de Poly Haven (CC0): https://polyhaven.com/a/red_brick
-    LoadTextureImage("../../data/red_brick_diff_1k.jpg"); // TextureImage0
-    LoadTextureImage("../../data/map.png");               // TextureImage1
-    LoadTextureImage("../../data/forest.png");            // TextureImage2 - floresta que tila fora do mapa
+    LoadTextureImage("../../data/map.png");               // TextureImage0
+    LoadTextureImage("../../data/forest.png");            // TextureImage1 - floresta que tila fora do mapa
     // rocket_r.png: gerada pela dupla com Python/PIL (fonte Arial Black) — sem fonte externa
-    LoadTextureImage("../../data/rocket_r.png");          // TextureImage3 - "R" da Equipe Rocket no balão
+    LoadTextureImage("../../data/rocket_r.png");          // TextureImage2 - "R" da Equipe Rocket no balão
     // Texturas dos demais objetos (paleta do boneco via UV; resto via triplanar):
-    LoadTextureImage("../../data/adventurer_palette.png", true,  false); // TextureImage4 - paleta do jogador (NEAREST)
-    LoadTextureImage("../../data/tex_pikachu.png",        false, true);  // TextureImage5 - pikachu
-    LoadTextureImage("../../data/tex_stone.png",          false, true);  // TextureImage6 - pedra (ginásio)
-    LoadTextureImage("../../data/tex_metal.png",          false, true);  // TextureImage7 - metal (PokéStop)
-    LoadTextureImage("../../data/tex_dark.png",           false, true);  // TextureImage8 - tecido escuro (balão)
-    LoadTextureImage("../../data/tex_grass.png",          false, true);  // TextureImage9 - grama (borda do mapa)
-    LoadTextureImage("../../data/pokebola_tex.png");      // TextureImage10 - pokébola (via UV)
-    LoadTextureImage("../../data/icon_bag.png");          // TextureImage11 - ícone do armazenamento (UI)
-    LoadTextureImage("../../data/pikachu_icon.png");      // TextureImage12 - miniatura do pikachu (UI)
-    LoadTextureImage("../../data/tex_charmander.png",     false, true);  // TextureImage13 - charmander (via UV)
-    LoadTextureImage("../../data/charmander_icon.png");   // TextureImage14 - miniatura do charmander (UI)
+    LoadTextureImage("../../data/adventurer_palette.png", true,  false); // TextureImage3 - paleta do jogador (NEAREST)
+    LoadTextureImage("../../data/tex_pikachu.png",        false, true);  // TextureImage4 - pikachu
+    LoadTextureImage("../../data/tex_stone.png",          false, true);  // TextureImage5 - pedra (ginásio)
+    LoadTextureImage("../../data/tex_metal.png",          false, true);  // TextureImage6 - metal (PokéStop)
+    LoadTextureImage("../../data/tex_dark.png",           false, true);  // TextureImage7 - tecido escuro (balão)
+    LoadTextureImage("../../data/tex_grass.png",          false, true);  // TextureImage8 - grama (borda do mapa)
+    LoadTextureImage("../../data/pokebola_tex.png");      // TextureImage9 - pokébola (via UV)
+    LoadTextureImage("../../data/icon_bag.png");          // TextureImage10 - ícone do armazenamento (UI)
+    LoadTextureImage("../../data/tex_charmander.png",     false, true);  // TextureImage11 - charmander (via UV)
     // FONTE: mapa-captura.png - imagem de fundo da cena de captura, gerada pelo ChatGPT (OpenAI).
-    LoadTextureImage("../../data/mapa-captura.png");      // TextureImage15 - fundo da cena de captura
+    LoadTextureImage("../../data/mapa-captura.png");      // TextureImage12 - fundo da cena de captura
     // Logos dos times (Pokémon GO), com transparência (alpha) para recortar no modal.
-    LoadTextureImage("../../data/valor.png",    false, false, true); // TextureImage16 - logo Valor (vermelho)
-    LoadTextureImage("../../data/mystic.png",   false, false, true); // TextureImage17 - logo Mystic (azul)
-    LoadTextureImage("../../data/instinct.png", false, false, true); // TextureImage18 - logo Instinct (amarelo)
-    LoadTextureImage("../../data/tex_snorlax.png", false, true);      // TextureImage19 - snorlax (via UV)
+    LoadTextureImage("../../data/valor.png",    false, false, true); // TextureImage13 - logo Valor (vermelho)
+    LoadTextureImage("../../data/mystic.png",   false, false, true); // TextureImage14 - logo Mystic (azul)
+    LoadTextureImage("../../data/instinct.png", false, false, true); // TextureImage15 - logo Instinct (amarelo)
+    LoadTextureImage("../../data/tex_snorlax.png", false, true);      // TextureImage16 - snorlax (via UV)
     // Atlas dos modelos de terceiros: NEAREST (sem mipmap). As texturas são
     // "folhas de expressão" (grades de olhos/bocas) e o filtro linear+mipmap
     // borraria as células vizinhas, bagunçando o rosto. NEAREST amostra a célula
     // exata (o modelo é cel-shaded/cor chapada, então fica nítido, não pixelado).
     // Charmeleon e Raichu têm partes com TRANSPARÊNCIA (ex.: bochechas) -> carrega
     // com alpha (RGBA) e o shader descarta os fragmentos transparentes.
-    LoadTextureImage("../../data/tex_charmeleon.png", true, false, true); // TextureImage20 - charmeleon (atlas, via UV, com alpha)
-    LoadTextureImage("../../data/tex_charmander_hd.png", true, false); // TextureImage21 - charmander HD (atlas, via UV)
-    LoadTextureImage("../../data/tex_pikachu_hd.png", true, false);    // TextureImage22 - pikachu HD (atlas, via UV)
-    LoadTextureImage("../../data/tex_raichu.png", true, false, true);  // TextureImage23 - raichu (atlas, via UV, com alpha)
-    LoadTextureImage("../../data/tex_snorlax_hd.png", true, false);    // TextureImage24 - snorlax HD (atlas texturas+cores do glTF, via UV)
+    LoadTextureImage("../../data/tex_charmeleon.png", true, false, true); // TextureImage17 - charmeleon (atlas, via UV, com alpha)
+    LoadTextureImage("../../data/tex_charmander_hd.png", true, false); // TextureImage18 - charmander HD (atlas, via UV)
+    LoadTextureImage("../../data/tex_pikachu_hd.png", true, false);    // TextureImage19 - pikachu HD (atlas, via UV)
+    LoadTextureImage("../../data/tex_raichu.png", true, false, true);  // TextureImage20 - raichu (atlas, via UV, com alpha)
+    LoadTextureImage("../../data/tex_snorlax_hd.png", true, false);    // TextureImage21 - snorlax HD (atlas texturas+cores do glTF, via UV)
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel cubemodel("../../data/cube.obj");
@@ -622,9 +618,9 @@ int main(int argc, char* argv[])
     // Ginásios (modelo do Pokémon GO): uma variante por cor de time + uma cinza
     // para os ginásios livres. Mesma geometria, só muda a cor da torre principal;
     // as cores são por vértice (assadas a partir dos materiais do glTF original).
-    // FONTE: pacote "pokemon go" (glTF) em data/pokemon-go-assets/ — modelo de
-    //   terceiros; convertido pela dupla para OBJ com cor por vértice e separado
-    //   em variantes graygym/redgym/blegym/yellowgym.
+    // FONTE: pacote "Pokemon GO Assets" (glTF) do Sketchfab — modelo de terceiros;
+    //   convertido pela dupla para OBJ com cor por vértice e separado em variantes
+    //   graygym/redgym/blegym/yellowgym. URL completa em data/FONTES.txt.
     ObjModel graygymmodel("../../data/graygym.obj");
     ComputeNormals(&graygymmodel);
     BuildTrianglesAndAddToVirtualScene(&graygymmodel);
@@ -2232,17 +2228,25 @@ int main(int argc, char* argv[])
                     glViewport(px, py, pw, ph);
 
                     const PokemonType& tt = g_PokeTypes[g_Captured[i].type];
-                    float ts = tt.detailScale * 0.8f; // margem para caber na célula
+                    // Miniatura usa o modelo de EXIBIÇÃO (HD) quando existe, igual ao
+                    // detalhe — senão, a malha base.
+                    bool        tHD    = (tt.dispMesh != nullptr);
+                    const char* tMesh  = tHD ? tt.dispMesh        : tt.mesh;
+                    int         tObj   = tHD ? tt.dispObjId        : tt.modelObjId;
+                    glm::vec3   tOff   = tHD ? tt.dispDetailOffset : tt.detailOffset;
+                    float       tScale = tHD ? tt.dispDetailScale  : tt.detailScale;
+
+                    float ts = tScale * 0.8f; // margem para caber na célula
                     model = Matrix_Rotate_Y(tspin)
                           * Matrix_Scale(ts, ts, ts)
-                          * Matrix_Translate(tt.detailOffset.x, tt.detailOffset.y, tt.detailOffset.z);
+                          * Matrix_Translate(tOff.x, tOff.y, tOff.z);
                     glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                    glUniform1i(g_object_id_uniform, tt.modelObjId);
+                    glUniform1i(g_object_id_uniform, tObj);
 
                     // Modelos com faces possivelmente invertidas: desenha dois lados.
-                    if (tt.modelObjId == CHARMANDER || tt.modelObjId == SNORLAX || tt.modelObjId == CHARMELEON || tt.modelObjId == RAICHU) glDisable(GL_CULL_FACE);
-                    else                                                          glEnable(GL_CULL_FACE);
-                    DrawVirtualObject(tt.mesh);
+                    glDisable(GL_CULL_FACE);
+                    DrawVirtualObject(tMesh);
+                    glEnable(GL_CULL_FACE);
                 }
 
                 // Restaura o viewport cheio e volta ao 2D (identidade) para
@@ -2736,9 +2740,6 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage19"), 19);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage20"), 20);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage21"), 21);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage22"), 22);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage23"), 23);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage24"), 24);
     glUseProgram(0);
 }
 

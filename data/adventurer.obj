@@ -1,6 +1,4 @@
 # https://github.com/mikedh/trimesh
-mtllib material.mtl
-usemtl material_0
 o player_character
 v -0.00000000 1.55362405 -0.12797273
 v 0.19776883 1.53438010 -0.14065869
