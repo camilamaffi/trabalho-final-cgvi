@@ -426,17 +426,16 @@ glm::vec3 RandomPokemonSpot(const SceneEntity& e)
     {
         x = ((float)rand() / (float)RAND_MAX) * 7.0f - 3.5f;
         z = ((float)rand() / (float)RAND_MAX) * 7.0f - 3.5f;
-        float pdx = x - g_PlayerX, pdz = z - g_PlayerZ;
-        if (pdx*pdx + pdz*pdz < 1.2f*1.2f) // não nasce em cima do jogador
+        // Não nasce em cima do jogador (círculo-círculo, raio 1.2).
+        if (CircleCollision(x, z, 0.0f, g_PlayerX, g_PlayerZ, 1.2f))
             continue;
 
         bool bad = false;
-        // Longe de outro Pokémon ativo.
+        // Longe de outro Pokémon ativo (círculo-círculo, raio MIN_SEP).
         for (const SceneEntity& o : g_Entities)
         {
             if (o.pokeType < 0 || !o.collidable) continue;
-            float dx = x - o.position.x, dz = z - o.position.z;
-            if (dx*dx + dz*dz < MIN_SEP*MIN_SEP) { bad = true; break; }
+            if (CircleCollision(x, z, 0.0f, o.position.x, o.position.z, MIN_SEP)) { bad = true; break; }
         }
         // AABB do Pokémon × AABB de cada ginásio.
         if (!bad)
@@ -554,11 +553,14 @@ int main(int argc, char* argv[])
     //
     LoadShadersFromFiles();
 
+    // FONTE: map.png (chão/cidade) e forest.png (paredes de floresta) — imagens
+    //   geradas pelo ChatGPT (OpenAI). Ver data/FONTES.txt.
     LoadTextureImage("../../data/map.png");               // TextureImage0
     LoadTextureImage("../../data/forest.png");            // TextureImage1 - floresta que tila fora do mapa
     // rocket_r.png: gerada pela dupla com Python/PIL (fonte Arial Black) — sem fonte externa
     LoadTextureImage("../../data/rocket_r.png");          // TextureImage2 - "R" da Equipe Rocket no balão
-    // Texturas dos demais objetos (paleta do boneco via UV; resto via triplanar):
+    // FONTE: adventurer_palette.png — textura-paleta do modelo "Adventurer" de
+    //   Quaternius (CC0), usada por UV no boneco do jogador. Ver data/FONTES.txt.
     LoadTextureImage("../../data/adventurer_palette.png", true,  false); // TextureImage3 - paleta do jogador (NEAREST)
     LoadTextureImage("../../data/tex_pikachu.png",        false, true);  // TextureImage4 - pikachu
     LoadTextureImage("../../data/tex_stone.png",          false, true);  // TextureImage5 - pedra (ginásio)
@@ -570,11 +572,16 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/tex_charmander.png",     false, true);  // TextureImage11 - charmander (via UV)
     // FONTE: mapa-captura.png - imagem de fundo da cena de captura, gerada pelo ChatGPT (OpenAI).
     LoadTextureImage("../../data/mapa-captura.png");      // TextureImage12 - fundo da cena de captura
-    // Logos dos times (Pokémon GO), com transparência (alpha) para recortar no modal.
+    // FONTE: logos dos times Valor/Mystic/Instinct — emblemas do Pokémon GO
+    //   (Niantic/The Pokémon Company), obtidos em clipartmax.com. Ver FONTES.txt.
+    //   Com transparência (alpha) para recortar no modal de seleção de time.
     LoadTextureImage("../../data/valor.png",    false, false, true); // TextureImage13 - logo Valor (vermelho)
     LoadTextureImage("../../data/mystic.png",   false, false, true); // TextureImage14 - logo Mystic (azul)
     LoadTextureImage("../../data/instinct.png", false, false, true); // TextureImage15 - logo Instinct (amarelo)
     LoadTextureImage("../../data/tex_snorlax.png", false, true);      // TextureImage16 - snorlax (via UV)
+    // FONTE: tex_charmeleon / tex_charmander_hd / tex_pikachu_hd / tex_raichu /
+    //   tex_snorlax_hd — atlas das texturas REAIS dos modelos glTF de terceiros
+    //   (Sketchfab). Ver data/FONTES.txt para as URLs de cada um.
     // Atlas dos modelos de terceiros: NEAREST (sem mipmap). As texturas são
     // "folhas de expressão" (grades de olhos/bocas) e o filtro linear+mipmap
     // borraria as células vizinhas, bagunçando o rosto. NEAREST amostra a célula
@@ -637,8 +644,9 @@ int main(int argc, char* argv[])
     ComputeNormals(&yellowgymmodel);
     BuildTrianglesAndAddToVirtualScene(&yellowgymmodel);
 
-    // PokéStops (mesmo pacote do Pokémon GO): "openstop" (disponível, azul) e
-    // "closedstop" (em cooldown, cinza). Cor por vértice, convertidos do glTF.
+    // FONTE: PokéStops (openstop/closedstop) — mesmo pacote "Pokemon GO Assets"
+    //   do Sketchfab dos ginásios (terceiros; URL em data/FONTES.txt). Cor por
+    //   vértice, convertidos do glTF. "openstop" (azul) e "closedstop" (cinza).
     ObjModel openstopmodel("../../data/openstop.obj");
     ComputeNormals(&openstopmodel);
     BuildTrianglesAndAddToVirtualScene(&openstopmodel);
@@ -647,8 +655,8 @@ int main(int argc, char* argv[])
     ComputeNormals(&closedstopmodel);
     BuildTrianglesAndAddToVirtualScene(&closedstopmodel);
 
-    // Itens das PokéStops (mesmo pacote do Pokémon GO): poção e fruta (berry).
-    // Cor por vértice, convertidos do glTF.
+    // FONTE: itens das PokéStops (potion/berry) — mesmo pacote "Pokemon GO Assets"
+    //   do Sketchfab (terceiros; URL em data/FONTES.txt). Cor por vértice, do glTF.
     ObjModel potionmodel("../../data/potion.obj");
     ComputeNormals(&potionmodel);
     BuildTrianglesAndAddToVirtualScene(&potionmodel);
@@ -674,34 +682,35 @@ int main(int argc, char* argv[])
     ComputeNormals(&snorlaxmodel);
     BuildTrianglesAndAddToVirtualScene(&snorlaxmodel);
 
-    // Charmeleon: forma EVOLUÍDA do Charmander. Convertido de charmeleon.glb
-    // (pacote de terceiros) para OBJ com COR-POR-VÉRTICE assada da textura do
-    // glTF; normalizado (centrado XZ, base y=0, altura 1). Shape "charmeleon".
+    // FONTE: Charmeleon — forma EVOLUÍDA do Charmander, modelo glTF de TERCEIROS
+    //   (Sketchfab; URL em data/FONTES.txt). Convertido pela dupla de charmeleon.glb
+    //   para OBJ com textura real via atlas+UV; normalizado (centrado XZ, base y=0,
+    //   altura 1). Shape "charmeleon".
     ObjModel charmeleonmodel("../../data/charmeleon.obj");
     ComputeNormals(&charmeleonmodel);
     BuildTrianglesAndAddToVirtualScene(&charmeleonmodel);
 
-    // Charmander HD: modelo de EXIBIÇÃO (de terceiros, charmander.glb) usado nas
-    // telas grandes (captura/detalhe/ginásio). No mapa e na miniatura segue o
-    // modelo simples da dupla (charmander.obj). Textura real via atlas+UV.
+    // FONTE: Charmander HD — modelo de EXIBIÇÃO, glTF de TERCEIROS (Sketchfab; URL
+    //   em data/FONTES.txt). Usado nas telas grandes (captura/detalhe/ginásio);
+    //   no mapa/miniatura segue o modelo simples da dupla. Textura real via atlas+UV.
     ObjModel charmanderhdmodel("../../data/charmander_hd.obj");
     ComputeNormals(&charmanderhdmodel);
     BuildTrianglesAndAddToVirtualScene(&charmanderhdmodel);
 
-    // Pikachu HD: modelo de EXIBIÇÃO (de terceiros, 025_pikachu.glb) usado nas
-    // telas grandes. No mapa/miniatura segue o modelo simples da dupla.
+    // FONTE: Pikachu HD — modelo de EXIBIÇÃO, glTF de TERCEIROS (Sketchfab,
+    //   025_pikachu.glb; URL em data/FONTES.txt). No mapa/miniatura segue o simples.
     ObjModel pikachuhdmodel("../../data/pikachu_hd.obj");
     ComputeNormals(&pikachuhdmodel);
     BuildTrianglesAndAddToVirtualScene(&pikachuhdmodel);
 
-    // Raichu: forma EVOLUÍDA do Pikachu (de terceiros, raichu.glb). Modelo único
-    // (sem distinção base/HD); textura real via atlas+UV.
+    // FONTE: Raichu — forma EVOLUÍDA do Pikachu, glTF de TERCEIROS (Sketchfab,
+    //   raichu.glb; URL em data/FONTES.txt). Modelo único; textura real via atlas+UV.
     ObjModel raichumodel("../../data/raichu.obj");
     ComputeNormals(&raichumodel);
     BuildTrianglesAndAddToVirtualScene(&raichumodel);
 
-    // Snorlax HD: modelo de EXIBIÇÃO (de terceiros, snorlax_pokemon.glb) usado nas
-    // telas grandes. No mapa/miniatura segue o snorlax simples da dupla.
+    // FONTE: Snorlax HD — modelo de EXIBIÇÃO, glTF de TERCEIROS (Sketchfab,
+    //   snorlax_pokemon.glb; URL em data/FONTES.txt). No mapa/miniatura segue o simples.
     ObjModel snorlaxhdmodel("../../data/snorlax_hd.obj");
     ComputeNormals(&snorlaxhdmodel);
     BuildTrianglesAndAddToVirtualScene(&snorlaxhdmodel);
@@ -829,13 +838,14 @@ int main(int argc, char* argv[])
             {
                 x = ((float)rand() / (float)RAND_MAX) * 7.0f - 3.5f; // [-3.5, 3.5]
                 z = ((float)rand() / (float)RAND_MAX) * 7.0f - 3.5f;
-                if (x*x + z*z < 1.5f*1.5f) // evita nascer em cima do jogador (origem)
+                // Evita nascer em cima do jogador (origem) — círculo-círculo, raio 1.5.
+                if (CircleCollision(x, z, 0.0f, 0.0f, 0.0f, 1.5f))
                     continue;
                 bool tooClose = false;
                 for (const glm::vec3& p : placedSpots)
                 {
-                    float dx = x - p.x, dz = z - p.z;
-                    if (dx*dx + dz*dz < MIN_SEP*MIN_SEP) { tooClose = true; break; }
+                    // Distância mínima entre Pokémon (círculo-círculo, raio MIN_SEP).
+                    if (CircleCollision(x, z, 0.0f, p.x, p.z, MIN_SEP)) { tooClose = true; break; }
                 }
                 if (!tooClose)
                     break; // achou um lugar livre
