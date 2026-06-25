@@ -296,7 +296,7 @@ const char* g_AttacksByType[3][g_NumAttacks] = {
 // também consiga consultá-las.
 //   índices: 0=Pikachu 1=Charmander 2=Snorlax 3=Raichu 4=Charmeleon
 const int g_EvolvesTo[5]   = {  3,  4, -1, -1, -1 }; // tipo destino (-1 = não evolui)
-const int g_EvolveCost[5]  = {  3,  3,  0,  0,  0 }; // doces necessários
+const int g_EvolveCost[5]  = { 12, 12,  0,  0,  0 }; // doces necessários
 const int g_CandyFamily[5] = {  0,  1,  2,  0,  1 }; // família de doces (forma base)
 
 // Doces acumulados por família (0=Pikachu, 1=Charmander, 2=Snorlax). Cada
@@ -400,7 +400,8 @@ int g_NumBerries   = 0;
 std::string g_Message;
 float       g_MessageTimer = 0.0f; // segundos restantes mostrando a mensagem
 
-// (Protótipos de CheckCollision/FindCollidingEntityIndex estão em "collisions.h".)
+// (Os testes de colisão/interseção — AABB, círculo e esfera — estão em
+//  "collisions.h"/"collisions.cpp", conforme a especificação do trabalho.)
 
 // Tempo (s) até um Pokémon capturado reaparecer em outro lugar do mapa.
 const float POKEMON_RESPAWN_DELAY = 8.0f;
@@ -1699,7 +1700,7 @@ int main(int argc, char* argv[])
             const float STOP_NEAR_RADIUS       = 1.3f;  // distância para poder coletar
             const float POKESTOP_SIZE          = 0.8f;  // escala do modelo (altura 1)
             const float POKESTOP_COOLDOWN_TIME = 30.0f; // segundos cinza após coletar
-            const int   ITEM_MAX               = 5;     // estoque máximo por item (5 p/ testar; era 100)
+            const int   ITEM_MAX               = 100;   // estoque máximo por item
 
             int swW = 0, swH = 0;
             glfwGetWindowSize(window, &swW, &swH);
@@ -2587,8 +2588,8 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-// (FindCollidingEntityIndex e CheckCollision foram movidas para collisions.cpp,
-//  conforme a especificação do trabalho.)
+// (Os testes de colisão/interseção ficam em collisions.cpp, conforme a
+//  especificação do trabalho.)
 
 // Função que carrega uma imagem para ser utilizada como textura
 void LoadTextureImage(const char* filename, bool nearest, bool tiling, bool alpha)

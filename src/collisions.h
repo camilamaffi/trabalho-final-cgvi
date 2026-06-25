@@ -55,13 +55,6 @@ struct SceneEntity
 extern std::map<std::string, SceneObject> g_VirtualScene;
 extern std::vector<SceneEntity>           g_Entities;
 
-// Testes de intersecção (AABB no plano XZ) entre o jogador e os objetos da
-// cena. Implementados em collisions.cpp.
-//   FindCollidingEntityIndex: retorna o índice da 1ª entidade colidida ou -1.
-//   CheckCollision: true se houver qualquer colisão.
-int  FindCollidingEntityIndex(float playerX, float playerZ, float playerHalfSize);
-bool CheckCollision(float playerX, float playerZ, float playerHalfSize);
-
 // Colisão círculo-círculo no plano XZ: true se o círculo do jogador (centro
 // playerX,playerZ; raio playerHalfSize) sobrepõe um objeto de centro
 // (objX,objZ) e raio objRadius. Usada para bloquear o jogador contra estruturas

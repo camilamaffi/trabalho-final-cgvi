@@ -43,9 +43,7 @@ uniform vec3 light_tint;
 #define POKEBALL          15
 #define UI_PANEL          16
 #define UI_ICON           17
-#define UI_THUMB          18
 #define CHARMANDER        19
-#define UI_THUMB_2        20
 #define UI_BORDER         21
 #define UI_TEAM_RED       22
 #define UI_TEAM_BLUE      23
@@ -142,7 +140,7 @@ void main()
     float V = 0.0;
 
 	// Coeficiente de refletância difusa
-	vec3 Kd0;
+	vec3 Kd0 = vec3(0.0); // inicializado por segurança (evita lixo se cair fora dos casos)
 
     if ( object_id == CUBE )
     {
@@ -339,7 +337,7 @@ void main()
 
     // Objetos "chapados" (sem iluminação): fundo de captura e interface 2D.
     if ( object_id == CAPTURE_BG || object_id == UI_PANEL || object_id == UI_BORDER
-         || object_id == UI_ICON || object_id == UI_THUMB || object_id == UI_THUMB_2
+         || object_id == UI_ICON
          || object_id == UI_TEAM_RED || object_id == UI_TEAM_BLUE || object_id == UI_TEAM_YELLOW )
     {
         color = vec4(pow(Kd0, vec3(1.0/2.2)), 1.0);

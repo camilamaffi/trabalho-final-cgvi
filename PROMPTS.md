@@ -1,7 +1,16 @@
 # PROMPTS.md
 
-Registro dos prompts usados com IA para gerar/editar código neste
-trabalho, conforme exigido pelo enunciado. Em ordem cronológica.
+Registro dos prompts usados com auxílio de IA (assistente de programação) para
+gerar/editar partes deste trabalho, conforme exigido pelo enunciado.
+
+- Em **ordem cronológica**. Os prompts estão resumidos/parafraseados, mas
+  refletem o que foi efetivamente pedido.
+- Cada item traz o **prompt** (o que foi pedido) e, após a seta `→`, um resumo
+  do **resultado** (o que mudou) com os arquivos afetados.
+- Por ser um log de iteração, algumas decisões iniciais foram **substituídas**
+  depois (ex.: o ginásio montado de `.stl` e o disco/anel procedurais das
+  PokéStops deram lugar aos modelos do pacote glTF; a captura por encostar virou
+  por clique). O estado final é sempre o que está no código.
 
 ---
 
@@ -288,3 +297,53 @@ Snorlax HD está com braços/orelhas pretos."
 recentrados/aumentados; `detailScale` reduzido; giro do detalhe por ângulo acumulado
 + velocidade suavizada; swatch de cor chapada do Snorlax codificado linear→sRGB.
 (`src/main.cpp`, `src/textrendering.cpp`, `data/tex_snorlax_hd.png`)
+
+**33. Respawn dos Pokémon evita estruturas (teste AABB)**
+Prompt: "Quando um Pokémon (re)aparece, use o teste AABB (caixa×caixa) para ele não
+nascer em cima de uma PokéStop ou ginásio — a estrutura tem prioridade."
+→ `AABBOverlapXZ` em `collisions.cpp`; `RandomPokemonSpot` calcula a caixa do
+Pokémon (bbox×escala) e rejeita pontos que sobrepõem a caixa de um ginásio/PokéStop;
+os Pokémon iniciais que caíram sobre estruturas são reposicionados. Com isso os
+**3 testes de interseção** (AABB / círculo / esfera) ficam todos ativos.
+(`src/collisions.h`, `src/collisions.cpp`, `src/main.cpp`)
+
+**34. Consolidar os testes de colisão no collisions.cpp**
+Prompt: "Revisa se todo teste de colisão está no collisions.cpp e unifica o que
+estiver inline."
+→ O espaçamento de spawn (não nascer no jogador nem sobre outro Pokémon) passou a
+chamar `CircleCollision` em vez de distância² na mão. Ficaram inline só os testes de
+**proximidade** (appearRadius / nearGym / nearStop) e o **picking** de clique (espaço
+de tela), que são conceitos diferentes de colisão física. (`src/main.cpp`)
+
+**35. Miniatura do armazenamento usa o modelo HD**
+Prompt: "A miniatura do armazenamento deve usar o modelo HD (igual à tela de
+detalhe), não o modelo simples."
+→ A grade de miniaturas passou a usar `dispMesh/dispObjId/dispDetail*` quando existe
+(o mapa continua com o modelo simples). (`src/main.cpp`)
+
+**36. Limpeza de assets órfãos e de artefatos no git**
+Prompt: "Remove os assets/arquivos não usados; e tira do git o que é artefato de
+build."
+→ Removidas 3 texturas órfãs (`red_brick`, `pikachu_icon`, `charmander_icon`) com
+**renumeração das unidades de textura** (25→22, via script para não errar o
+mapeamento no shader); removidos os 5 `.glb` de origem e a pasta `pokemon-go-assets/`
+(não eram carregados em runtime, só provenância — fica a URL no FONTES); removido o
+`material.mtl` e as linhas `mtllib`/`usemtl` órfãs dos `.obj`; `bin/Debug/main.exe` e
+`gerr.txt` **destrackeados** e adicionados ao `.gitignore`.
+(`src/main.cpp`, `src/shader_fragment.glsl`, `data/`, `.gitignore`)
+
+**37. Citar as fontes também no ponto de uso (código)**
+Prompt: "Confirma/garante que as fontes de terceiros estão citadas também onde são
+usadas no código, não só no FONTES.txt."
+→ Comentários `FONTE` adicionados/atualizados em cada `LoadTextureImage`/`ObjModel`
+de asset de terceiros (modelos HD/evolução, texturas-atlas, logos dos times,
+ginásios/PokéStops/itens, `map.png`/`forest.png` do ChatGPT, paleta do Adventurer),
+cada um apontando para `data/FONTES.txt`. (`src/main.cpp`, `data/FONTES.txt`)
+
+**38. Ajustes finais de gameplay**
+Prompts (vários, curtos): "custo da evolução = 3 doces"; "Pokémon que está num
+ginásio não pode evoluir"; "limite de itens = 5 (para testar a mochila cheia)";
+"troca o rótulo (gym) por (gin.)".
+→ `g_EvolveCost` = 3; botão de evoluir bloqueado quando `placedGym >= 0`
+("No ginasio"); `ITEM_MAX` = 5 (valor de teste; produção = 100); rótulo da grade
+passa a "(gin.)". (`src/main.cpp`)

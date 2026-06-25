@@ -15,6 +15,9 @@ Gilmar: Sistema de colisão e modelos 3d dos pokemons.
 
 # Uso de IA
 
+Para a utilização deste trabalho foram utilizados duas IAs generativas. A primeira, usada de maneira pontual, foi o ChatGPT - GPT-5.5, que foi utilizado para gerar imagens de florestas e do mapa do bloco IV do Campus do Vale com estética semelhante ao jogo original.
+Para 
+
 # Ilustração
 
 # Manual da Aplicação
