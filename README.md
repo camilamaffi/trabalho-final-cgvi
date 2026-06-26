@@ -7,12 +7,15 @@
 # Contribuição
 
 Camila: Mapa, pokéstops e ginásios, captura, armazenamento dos Pokémon, câmeras e modelos de iluminação, animações e texturas.
+
 Gilmar: Sistema de colisão, modelos 3D dos Pokémon e menu inicial.
 
 # Uso de IA
 
 Para a realização deste trabalho foram utilizadas duas IAs generativas. A primeira, usada de maneira pontual, foi o ChatGPT - GPT-5.5, que foi utilizado para gerar imagens de florestas e do mapa do bloco IV do Campus do Vale com estética semelhante ao jogo original.
+
 Para o desenvolvimento da aplicação, foi utilizado de maneira substancial o Claude Code, modelo OPUS 4.8. Ele foi utilizado principalmente para relacionar os elementos e interações visuais com a mecânica do jogo, por exemplo, as animações de jogar uma fruta para um Pokémon no ginásio envolvem ações de lógica do jogo que precisam se converter em ações visuais. Além disso, foi utilizado para conhecer sintaxe e comandos tanto do C++ quanto de OpenGL, reduzindo a curva de aprendizado e o tempo necessário para usar estes artefatos. 
+
 A IA foi de grande ajuda, mas é preciso sempre lembrar de suas limitações e sua maneira de funcionar. Além disso, em um uso extensivo, é fácil perder o controle sobre o que está sendo feito. Em várias etapas foi preciso parar e analisar criteriosamente o que o Claude estava propondo. Em um dado momento, em que estava com dificuldades na animação das pokéstops, solicitei ao Claude que fizesse o modelo da pokéstop mais simples. Então ele transformou a pokéstop em um monolito. De fato, estava mais simples, mas não era o que eu precisava. Então, ao longo do trabalho, notei que precisava dar contexto, orientações claras e técnicas para a aplicação.
 
 # Ilustração
